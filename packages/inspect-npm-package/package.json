@@ -1,0 +1,24 @@
+{
+  "name": "inspect-npm-package",
+  "version": "0.1.0",
+  "type": "module",
+  "funding": "https://github.com/sponsors/Jaid",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaidlab/package-briefer.git"
+  },
+  "exports": {
+    ".": {
+      "default": "./src/main.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test --max-concurrency 1 ./test"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "inspect-exports": "workspace:*",
+    "type-fest": "^5.8.0"
+  }
+}

@@ -1,5 +1,5 @@
-const packageBriefer = () => {
-  return 'package-briefer' // TODO Implement actual functionality
-}
+#!/usr/bin/env bun
+import makeCli from './makeCli.ts'
 
-export default packageBriefer
+const cli = makeCli()
+await cli()

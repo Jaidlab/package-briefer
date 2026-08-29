@@ -15,6 +15,10 @@
 # dotenv
 .env
 
-
 # Bun
-node_modules/
+/node_modules/
+/packages/*/out/
+/packages/*/dist/
+/packages/*/temp/
+/packages/*/private/
+/packages/*/node_modules/
