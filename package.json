@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:jaidlab/package-briefer.git"
+    "url": "git+https://github.com/jaidlab/package-briefer.git"
   },
   "scripts": {
     "test": "bun test --max-concurrency 1"
