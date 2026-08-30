@@ -1,6 +1,7 @@
 import type {BriefRelease, EasyDate, GitHubIssue, Inspection} from 'inspect-npm-package'
 
 import {Temporal} from '@js-temporal/polyfill'
+import flattenString from 'flatten-string'
 import stringifyClank from 'stringify-clank'
 
 export type Options = {
@@ -94,6 +95,13 @@ const formatReleaseStats = (release: BriefRelease) => {
     return `${release.files} files`
   }
 }
+const formatDependencies = (release: BriefRelease) => {
+  if (!release.dependencies) {
+    return
+  }
+  const noun = release.dependencies.count === 1 ? 'dependency' : 'dependencies'
+  return `${release.dependencies.size} bytes from ${release.dependencies.count} ${noun}`
+}
 const getVisibleReleaseVersions = (inspection: Inspection) => {
   const versions = new Set<string>([inspection.releases.first.version])
   for (const release of Object.values(inspection.releases.tags)) {
@@ -104,28 +112,22 @@ const getVisibleReleaseVersions = (inspection: Inspection) => {
   }
   return versions
 }
-const pushRelease = (lines: Array<string>, release: BriefRelease, now: Temporal.Instant, recentSeconds: number) => {
-  lines.push(`#### ${release.version}`, '', formatDate(release.date, now, recentSeconds))
-  const stats = formatReleaseStats(release)
-  if (stats) {
-    lines.push(stats)
-  }
-  if (release.dependencies) {
-    const noun = release.dependencies.count === 1 ? 'dependency' : 'dependencies'
-    lines.push(`${release.dependencies.size} bytes from ${release.dependencies.count} ${noun}`)
-  }
-  lines.push('')
+const pushRelease = (paragraphs: Array<string>, release: BriefRelease, now: Temporal.Instant, recentSeconds: number) => {
+  paragraphs.push(`#### ${release.version}`)
+  paragraphs.push(flattenString.lines(formatDate(release.date, now, recentSeconds), formatReleaseStats(release), formatDependencies(release)))
 }
 const pluralize = (count: number, singular: string, plural = `${singular}s`) => {
   return `${count} ${count === 1 ? singular : plural}`
 }
-const pushIssueSample = (lines: Array<string>, title: string, sample: Array<GitHubIssue>, now: Temporal.Instant, recentSeconds: number) => {
+const pushIssueSample = (paragraphs: Array<string>, title: string, sample: Array<GitHubIssue>, now: Temporal.Instant, recentSeconds: number) => {
   if (!sample.length) {
     return
   }
-  lines.push(`### ${title}`, '')
+  paragraphs.push(`### ${title}`)
   for (const issue of sample) {
-    lines.push(`#### ${issue.number}`, '', issue.author, formatDate(issue.date, now, recentSeconds), issue.status, '', issue.title, '')
+    paragraphs.push(`#### ${issue.number}`)
+    paragraphs.push(flattenString.lines(issue.author, formatDate(issue.date, now, recentSeconds), issue.status))
+    paragraphs.push(issue.title)
   }
 }
 const markdownifyInspection = (inspection: Inspection, options: Options = {}) => {
@@ -134,123 +136,91 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
   const focusedRelease = inspection.focused
   const packageName = focusedRelease.package.name ?? 'Package'
   const focusedMetadataIsVisible = getVisibleReleaseVersions(inspection).has(focusedRelease.version)
-  const lines = [
-    `# ${packageName} ${focusedRelease.version}`,
-    '',
-  ]
+  const paragraphs = [`# ${packageName} ${focusedRelease.version}`]
   if (!focusedMetadataIsVisible) {
-    lines.push('## npm', '', formatDate(focusedRelease.date, now, recentSeconds))
-    const stats = formatReleaseStats(focusedRelease)
-    if (stats) {
-      lines.push(stats)
-    }
-    if (focusedRelease.dependencies) {
-      const noun = focusedRelease.dependencies.count === 1 ? 'dependency' : 'dependencies'
-      lines.push(`${focusedRelease.dependencies.size} bytes from ${focusedRelease.dependencies.count} ${noun}`)
-    }
-    lines.push('')
+    paragraphs.push('## npm')
+    paragraphs.push(flattenString.lines(formatDate(focusedRelease.date, now, recentSeconds), formatReleaseStats(focusedRelease), formatDependencies(focusedRelease)))
   }
   if (options.clank) {
-    lines.push(stringifyClank({package: focusedRelease.package}), '')
+    paragraphs.push(stringifyClank({package: focusedRelease.package}))
     if (inspection.exports) {
-      lines.push(stringifyClank({exports: inspection.exports}), '')
+      paragraphs.push(stringifyClank({exports: inspection.exports}))
     }
   } else {
-    lines.push('## package', '', JSON.stringify(focusedRelease.package), '')
+    paragraphs.push('## package', JSON.stringify(focusedRelease.package))
     if (inspection.exports) {
-      lines.push('## exports', '', JSON.stringify(inspection.exports), '')
+      paragraphs.push('## exports', JSON.stringify(inspection.exports))
     }
   }
-  lines.push(`# ${inspection.releases.total} npm releases`, '', '## tags', '')
+  paragraphs.push(`# ${inspection.releases.total} npm releases`, '## tags')
   for (const [tag, release] of Object.entries(inspection.releases.tags)) {
-    lines.push(`### ${tag}`, '')
-    pushRelease(lines, release, now, recentSeconds)
+    paragraphs.push(`### ${tag}`)
+    pushRelease(paragraphs, release, now, recentSeconds)
     for (const previous of release.previous ?? []) {
-      pushRelease(lines, previous, now, recentSeconds)
+      pushRelease(paragraphs, previous, now, recentSeconds)
     }
   }
-  const first = inspection.releases.first
-  lines.push('## first', '')
-  pushRelease(lines, first, now, recentSeconds)
+  paragraphs.push('## first')
+  pushRelease(paragraphs, inspection.releases.first, now, recentSeconds)
   if (inspection.repository) {
     if ('github' in inspection.repository) {
       const repository = inspection.repository.github
-      lines.push(`# github.com/${repository.slug.toLowerCase()}`, '')
-      if (repository.stars) {
-        lines.push(pluralize(repository.stars, 'star'))
-      }
-      if (repository.forks) {
-        lines.push(pluralize(repository.forks, 'fork'))
-      }
-      if (repository.stars || repository.forks) {
-        lines.push('')
+      paragraphs.push(`# github.com/${repository.slug.toLowerCase()}`)
+      const repositoryStats = flattenString.lines(repository.stars && pluralize(repository.stars, 'star'), repository.forks && pluralize(repository.forks, 'fork'))
+      if (repositoryStats) {
+        paragraphs.push(repositoryStats)
       }
       if (repository.issues && (repository.issueSample.length || repository.issueCreatedSample.length)) {
-        lines.push(`## ${pluralize(repository.issues, 'issue')}`, '')
-        pushIssueSample(lines, 'recently updated', repository.issueSample, now, recentSeconds)
-        pushIssueSample(lines, 'recently created', repository.issueCreatedSample, now, recentSeconds)
+        paragraphs.push(`## ${pluralize(repository.issues, 'issue')}`)
+        pushIssueSample(paragraphs, 'recently updated', repository.issueSample, now, recentSeconds)
+        pushIssueSample(paragraphs, 'recently created', repository.issueCreatedSample, now, recentSeconds)
       }
       if (repository.pullRequests && (repository.pullRequestSample.length || repository.pullRequestCreatedSample.length)) {
-        lines.push(`## ${pluralize(repository.pullRequests, 'pull request')}`, '')
-        pushIssueSample(lines, 'recently updated', repository.pullRequestSample, now, recentSeconds)
-        pushIssueSample(lines, 'recently created', repository.pullRequestCreatedSample, now, recentSeconds)
+        paragraphs.push(`## ${pluralize(repository.pullRequests, 'pull request')}`)
+        pushIssueSample(paragraphs, 'recently updated', repository.pullRequestSample, now, recentSeconds)
+        pushIssueSample(paragraphs, 'recently created', repository.pullRequestCreatedSample, now, recentSeconds)
       }
       if (repository.commits && repository.commitSample.length) {
-        lines.push(`## ${pluralize(repository.commits, 'commit')}`, '')
+        paragraphs.push(`## ${pluralize(repository.commits, 'commit')}`)
         for (const commit of repository.commitSample) {
-          lines.push(`### ${commit.hash}`, '', commit.author, formatDate(commit.date, now, recentSeconds), '', commit.message, '')
+          paragraphs.push(`### ${commit.hash}`)
+          paragraphs.push(flattenString.lines(commit.author, formatDate(commit.date, now, recentSeconds)))
+          paragraphs.push(commit.message)
         }
       }
       if (repository.releases && repository.releaseSample.length) {
-        lines.push(`## ${pluralize(repository.releases, 'release')}`, '')
+        paragraphs.push(`## ${pluralize(repository.releases, 'release')}`)
         for (const release of repository.releaseSample) {
-          lines.push(`### ${release.tag}`, '', release.author, formatDate(release.date, now, recentSeconds), release.status)
+          paragraphs.push(`### ${release.tag}`)
+          paragraphs.push(flattenString.lines(release.author, formatDate(release.date, now, recentSeconds), release.status))
           if (release.name) {
-            lines.push('', release.name)
+            paragraphs.push(release.name)
           }
-          lines.push('')
         }
       }
       if (repository.contributors && repository.contributorSample.length) {
-        lines.push(`## ${pluralize(repository.contributors, 'contributor')}`, '')
+        paragraphs.push(`## ${pluralize(repository.contributors, 'contributor')}`)
         for (const contributor of repository.contributorSample) {
-          lines.push(`### ${contributor.name}`, '', pluralize(contributor.commits, 'commit'))
-          if (contributor.profile) {
-            if (options.clank) {
-              lines.push(stringifyClank({profile: contributor.profile}), '')
-            } else {
-              lines.push('')
+          paragraphs.push(`### ${contributor.name}`)
+          if (options.clank && contributor.profile) {
+            paragraphs.push(flattenString.lines(pluralize(contributor.commits, 'commit'), stringifyClank({profile: contributor.profile})))
+          } else {
+            paragraphs.push(pluralize(contributor.commits, 'commit'))
+            if (contributor.profile) {
               const profile = contributor.profile
-              const profileLines: Array<string> = []
-              if (profile.name) {
-                profileLines.push(`name ${profile.name}`)
-              }
-              if (profile.location) {
-                profileLines.push(`location ${profile.location}`)
-              }
-              if (profile.company) {
-                profileLines.push(`company ${profile.company}`)
-              }
-              if (profile.repositories) {
-                profileLines.push(pluralize(profile.repositories, 'repository', 'repositories'))
-              }
-              if (profile.followers) {
-                profileLines.push(pluralize(profile.followers, 'follower'))
-              }
-              if (profileLines.length) {
-                lines.push('#### profile', '', ...profileLines, '')
+              const profileLines = flattenString.lines(profile.name && `name ${profile.name}`, profile.location && `location ${profile.location}`, profile.company && `company ${profile.company}`, profile.repositories && pluralize(profile.repositories, 'repository', 'repositories'), profile.followers && pluralize(profile.followers, 'follower'))
+              if (profileLines) {
+                paragraphs.push('#### profile', profileLines)
               }
             }
-          } else {
-            lines.push('')
           }
         }
       }
     } else {
-      lines.push(`# ${inspection.repository.url}`, '')
+      paragraphs.push(`# ${inspection.repository.url}`)
     }
   }
-  return lines.join('\n')
+  return `${flattenString.paragraphs(paragraphs)}\n`
 }
 
 export default markdownifyInspection

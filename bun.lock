@@ -37,6 +37,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@js-temporal/polyfill": "^0.5.1",
+        "flatten-string": "^0.2.0",
         "inspect-npm-package": "workspace:*",
         "stringify-clank": "^0.1.1",
       },
@@ -300,6 +301,8 @@
     "flat-cache": ["flat-cache@4.0.1", "", { "dependencies": { "flatted": "^3.2.9", "keyv": "^4.5.4" } }, "sha512-f7ccFPK3SXFHpx15UIGyRJ/FJQctuKZ0zVuN3frBo4HnK3cay9VEW0R6yPYFHC0AgqhukPzKjq22t5DmAyqGyw=="],
 
     "flatted": ["flatted@3.4.4", "", {}, "sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q=="],
+
+    "flatten-string": ["flatten-string@0.2.0", "", {}, "sha512-cLBGTadYOmvA/kioX/IjSw0MXcp768Ctn6lnfuY9XV8utXgzeTMCor3Y0o9nBlwqvnXE/VwmCqKvozaExD0hpg=="],
 
     "forward-slash-path": ["forward-slash-path@0.3.0", "", {}, "sha512-GGJPCkn1/rtiEWP8LOtOCDDrlQgcx0NgxIqTfg58N6odhtP3IGjkqu2qr+W9axdzuJMtffTF4y8I2yCiRV7NFg=="],
 
