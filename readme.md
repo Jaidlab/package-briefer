@@ -13,7 +13,7 @@ CLI options:
 ```text
 --http-hostname <hostname>                   HTTP hostname (default: 127.0.0.1)
 --http-port <port>                           HTTP port (default: 944)
---exports-docker-host <host>                  Docker daemon for runtime export inspection
+--docker-host <host>                  Docker daemon for runtime export inspection
 --recent-commits <integer>                   Recent GitHub commits (default: 3)
 --recently-created-pull-requests <integer>   Recently created GitHub pull requests (default: 5)
 --recently-updated-pull-requests <integer>   Recently updated GitHub pull requests (default: 5)
@@ -44,7 +44,7 @@ Scoped packages are supported as well.
 
 - `HOST` – listen hostname, default `127.0.0.1`.
 - `PORT` – listen port, default `944`.
-- `EXPORTS_DOCKER_HOST` – optional Docker daemon endpoint used by `inspect-exports`, for example `tcp://docker:2375`.
+- `DOCKER_HOST` – optional Docker daemon endpoint used by `inspect-exports`, for example `ssh://jaid@nas`. `EXPORTS_DOCKER_HOST` remains supported as a fallback.
 - `GITHUB_TOKEN` or `GH_TOKEN` – optional GitHub token for higher API rate limits.
 
 Responses are cached in memory for 5 minutes. Release sizes use npm’s `dist.unpackedSize` when available and fall back to calculating the unpacked tarball size for older releases. If a fallback tarball is missing, unreadable or corrupt, the `size` property is omitted instead of failing the package response. Release dates contain both absolute UTC and relative forms. `focused` contains the selected release and package.json metadata. It defaults to npm’s `latest` tag and can be selected explicitly with `/v/<version>`; tags and `first` remain brief releases. Non-GitHub repository URLs are preserved as `{url}`. GitHub `issues` counts open issues and excludes pull requests.

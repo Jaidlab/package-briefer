@@ -28,7 +28,7 @@ export const run: CommandHandler<typeof mainCommand> = async context => {
   }
   const inspectionOptions = {
     ...samplingOptions,
-    ...flags.exportsDockerHost === undefined ? {} : {exportsDockerHost: flags.exportsDockerHost},
+    ...flags.dockerHost === undefined ? {} : {exportsDockerHost: flags.dockerHost},
   }
   const server = new PackageBrieferServer(undefined, undefined, undefined, inspectionOptions).listen({
     hostname: flags.httpHostname,

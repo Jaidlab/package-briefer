@@ -15,9 +15,9 @@ const mainCommand = defineCommand({
       default: Number(Bun.env.PORT ?? 944),
       description: 'HTTP port',
     },
-    exportsDockerHost: {
+    dockerHost: {
       type: String,
-      default: Bun.env.EXPORTS_DOCKER_HOST,
+      default: Bun.env.DOCKER_HOST ?? Bun.env.EXPORTS_DOCKER_HOST,
       description: 'Docker daemon used for runtime export inspection',
     },
     recentCommits: {
