@@ -316,8 +316,10 @@ test('inspects npm package metadata', async () => {
     name: 'demo',
     fetch: fetchMock,
     now,
+    exportsDockerHost: 'tcp://docker.example:2375',
     exportsInspector: async options => {
       expect(options).toEqual({
+        dockerHost: 'tcp://docker.example:2375',
         name: 'demo',
         version: '2.0.0',
       })

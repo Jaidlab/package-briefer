@@ -1,6 +1,6 @@
 import type {FetchImplementation, NpmPackument, PackumentVersion} from './lib/NpmRegistryClient.ts'
 import type {BriefPackage, BriefRelease, FocusedRelease, Inspection, TaggedRelease} from './lib/types.ts'
-import type {Inspection as ExportsInspection} from 'inspect-exports'
+import type {Inspection as ExportsInspection, Options as InspectExportsOptions} from 'inspect-exports'
 
 import {Temporal} from '@js-temporal/polyfill'
 import inspectExports from 'inspect-exports'
@@ -10,10 +10,8 @@ import {defaultGitHubInspectionOptions, getGitHubSlug, getRepositoryUrl, GitHubC
 import {NpmRegistryClient, PackageVersionNotFoundError} from './lib/NpmRegistryClient.ts'
 import {NpmxClient} from './lib/NpmxClient.ts'
 
-export type ExportsInspector = (options: {
-  name: string
-  version: string
-}) => Promise<ExportsInspection | undefined>
+export type ExportsInspectorOptions = Pick<InspectExportsOptions, 'dockerHost' | 'name' | 'version'>
+export type ExportsInspector = (options: ExportsInspectorOptions) => Promise<ExportsInspection | undefined>
 
 export type SamplingOptions = {
   recentCommits?: number
@@ -33,6 +31,7 @@ export const defaultSamplingOptions = {
 } satisfies Required<SamplingOptions>
 
 export type Options = SamplingOptions & {
+  exportsDockerHost?: string
   exportsInspector?: ExportsInspector
   fetch?: FetchImplementation
   githubToken?: string
@@ -98,6 +97,7 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   const exportsPromise = (async () => {
     try {
       return await (options.exportsInspector ?? inspectExports)({
+        ...options.exportsDockerHost === undefined ? {} : {dockerHost: options.exportsDockerHost},
         name: packument.name,
         version: focusedVersion,
       })

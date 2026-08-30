@@ -1,4 +1,4 @@
-import type {Inspection, SamplingOptions} from 'inspect-npm-package'
+import type {Inspection, Options as InspectNpmPackageOptions, SamplingOptions} from 'inspect-npm-package'
 
 import {expect, test} from 'bun:test'
 
@@ -38,10 +38,10 @@ const inspection: Inspection = {
     },
   },
 }
-const inspectCalls: Array<SamplingOptions & {name: string
-  version?: string}> = []
-const inspect = async (options: SamplingOptions & {name: string
-  version?: string}) => {
+type InspectOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost'> & {name: string
+  version?: string}
+const inspectCalls: Array<InspectOptions> = []
+const inspect = async (options: InspectOptions) => {
   inspectCalls.push(options)
   if (options.name === 'missing') {
     throw new PackageNotFoundError(options.name)
@@ -128,6 +128,18 @@ test('passes sampling options to the inspector', async () => {
     ...samplingOptions,
     name: 'demo',
     version: '0.3.1',
+  })
+})
+test('passes the exports Docker daemon to the inspector', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, markdownify, 0, {
+    exportsDockerHost: 'tcp://docker.example:2375',
+  })
+  const response = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo'))
+  expect(response.status).toBe(200)
+  expect(inspectCalls.at(-1)).toEqual({
+    exportsDockerHost: 'tcp://docker.example:2375',
+    name: 'demo',
   })
 })
 test('maps package-not-found errors to 404', async () => {

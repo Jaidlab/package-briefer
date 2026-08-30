@@ -45,6 +45,20 @@ test('resolves latest and inspects exports', async () => {
     },
   ])
 })
+test('passes an explicit Docker daemon to the container runner', async () => {
+  let runnerOptions: ContainerRunnerOptions | undefined
+  const result = await inspectExports({
+    name: 'demo',
+    version: '1.0.0',
+    dockerHost: 'tcp://docker.example:2375',
+    containerRunner: async options => {
+      runnerOptions = options
+      return JSON.stringify(inspection)
+    },
+  })
+  expect(result).toEqual(inspection)
+  expect(runnerOptions?.dockerHost).toBe('tcp://docker.example:2375')
+})
 test('uses an explicit version without fetching the registry', async () => {
   let fetched = false
   const result = await inspectExports({

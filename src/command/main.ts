@@ -26,7 +26,11 @@ export const run: CommandHandler<typeof mainCommand> = async context => {
   for (const [name, value] of Object.entries(samplingOptions)) {
     assertInteger(name.replaceAll(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`), value, name === 'recentVersions' ? 1 : 0)
   }
-  const server = new PackageBrieferServer(undefined, undefined, undefined, samplingOptions).listen({
+  const inspectionOptions = {
+    ...samplingOptions,
+    ...flags.exportsDockerHost === undefined ? {} : {exportsDockerHost: flags.exportsDockerHost},
+  }
+  const server = new PackageBrieferServer(undefined, undefined, undefined, inspectionOptions).listen({
     hostname: flags.httpHostname,
     port: flags.httpPort,
   })

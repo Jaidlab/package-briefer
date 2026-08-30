@@ -1,4 +1,4 @@
-import type {Inspection, SamplingOptions} from 'inspect-npm-package'
+import type {Inspection, Options as InspectNpmPackageOptions, SamplingOptions} from 'inspect-npm-package'
 
 import {Temporal} from '@js-temporal/polyfill'
 import inspectNpmPackage, {PackageNotFoundError, PackageVersionNotFoundError} from 'inspect-npm-package'
@@ -6,7 +6,8 @@ import markdownifyInspection from 'markdownify-inspection'
 
 const routePrefix = '/npmjs.com/package/'
 
-type Inspect = (options: SamplingOptions & {
+type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost'>
+type Inspect = (options: InspectionOptions & {
   name: string
   version?: string
 }) => Promise<Inspection>
@@ -140,7 +141,7 @@ export class PackageBrieferServer {
   constructor(private readonly inspect: Inspect = inspectNpmPackage,
     private readonly markdownify: Markdownify = markdownifyInspection,
     private readonly cacheTtlMs = 300_000,
-    private readonly samplingOptions: SamplingOptions = {}) {}
+    private readonly inspectionOptions: InspectionOptions = {}) {}
 
   listen(options: {
     hostname?: string
@@ -161,7 +162,7 @@ export class PackageBrieferServer {
       return cached.value
     }
     const value = this.inspect({
-      ...this.samplingOptions,
+      ...this.inspectionOptions,
       name: packageName,
       ...version === undefined ? {} : {version},
     })

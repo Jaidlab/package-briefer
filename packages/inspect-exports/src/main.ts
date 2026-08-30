@@ -34,6 +34,7 @@ export type Inspection = {
 export type FetchImplementation = (input: Request | URL | string, init?: RequestInit) => Promise<Response>
 
 export type ContainerRunnerOptions = {
+  dockerHost?: string
   image: string
   name: string
   timeoutMs: number
@@ -44,6 +45,7 @@ export type ContainerRunner = (options: ContainerRunnerOptions) => Promise<strin
 
 export type Options = {
   containerRunner?: ContainerRunner
+  dockerHost?: string
   fetch?: FetchImplementation
   image?: string
   name: string
@@ -87,8 +89,9 @@ console.log(JSON.stringify(commonJs ? {default_or_named: namedInspection} : {
   ...(defaultExport !== undefined ? {default: describe(defaultExport)} : {}),
   ...(Object.keys(named).length ? {named: namedInspection} : {}),
 }))`
-const executeDocker = async (args: Array<string>, timeoutMs: number) => {
-  const process = Bun.spawn(['docker', ...args], {
+const executeDocker = async (args: Array<string>, timeoutMs: number, dockerHost?: string) => {
+  const dockerArgs = dockerHost ? ['--host', dockerHost, ...args] : args
+  const process = Bun.spawn(['docker', ...dockerArgs], {
     stderr: 'pipe',
     stdout: 'pipe',
   })
@@ -133,11 +136,11 @@ export const runContainer: ContainerRunner = async options => {
       'bun add "$PACKAGE_SPEC" >/dev/null 2>&1 && bun --eval "$1"',
       'sh',
       probe,
-    ], options.timeoutMs)
-    return await executeDocker(['start', '-a', containerName], options.timeoutMs)
+    ], options.timeoutMs, options.dockerHost)
+    return await executeDocker(['start', '-a', containerName], options.timeoutMs, options.dockerHost)
   } finally {
     try {
-      await executeDocker(['rm', '-f', containerName], 10_000)
+      await executeDocker(['rm', '-f', containerName], 10_000, options.dockerHost)
     } catch {
     }
   }
@@ -164,6 +167,7 @@ const inspectExports = async (options: Options): Promise<Inspection | undefined>
     const fetchImplementation = options.fetch ?? fetch
     const version = options.version ?? await resolveVersion(options.name, fetchImplementation)
     const output = await (options.containerRunner ?? runContainer)({
+      ...options.dockerHost === undefined ? {} : {dockerHost: options.dockerHost},
       image: options.image ?? defaultImage,
       name: options.name,
       timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
