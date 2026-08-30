@@ -1,6 +1,7 @@
 import type {BriefRelease, EasyDate, GitHubIssue, Inspection} from 'inspect-npm-package'
 
 import {Temporal} from '@js-temporal/polyfill'
+import stringifyClank from 'stringify-clank'
 
 export type Options = {
   now?: Temporal.Instant
@@ -148,9 +149,9 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
     }
     lines.push('')
   }
-  lines.push('## package', '', JSON.stringify(focusedRelease.package), '')
+  lines.push('## package', '', stringifyClank(focusedRelease.package), '')
   if (inspection.exports) {
-    lines.push('## exports', '', JSON.stringify(inspection.exports), '')
+    lines.push('## exports', '', stringifyClank(inspection.exports), '')
   }
   lines.push(`# ${inspection.releases.total} npm releases`, '', '## tags', '')
   for (const [tag, release] of Object.entries(inspection.releases.tags)) {

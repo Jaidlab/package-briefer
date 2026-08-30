@@ -38,6 +38,7 @@
       "dependencies": {
         "@js-temporal/polyfill": "^0.5.1",
         "inspect-npm-package": "workspace:*",
+        "stringify-clank": "^0.1.1",
       },
     },
   },
@@ -411,6 +412,8 @@
     "shebang-regex": ["shebang-regex@3.0.0", "", {}, "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A=="],
 
     "stable-hash-x": ["stable-hash-x@0.2.0", "", {}, "sha512-o3yWv49B/o4QZk5ZcsALc6t0+eCelPc44zZsLtCQnZPDwFpDYSWcDnrv2TtMmMbQ7uKo3J0HTURCqckw23czNQ=="],
+
+    "stringify-clank": ["stringify-clank@0.1.1", "", {}, "sha512-x2KdSOVJLYKwZfbynoUuOxdshXKboQ6ee2sa7NepTi1wbIdFbqON8vjOECN9WWfjPGUeozIYplVrfhw+nITRYA=="],
 
     "strip-indent": ["strip-indent@4.1.1", "", {}, "sha512-SlyRoSkdh1dYP0PzclLE7r0M9sgbFKKMFXpFRUMNuKhQSbC6VQIGzq3E0qsfvGJaUFJPGv6Ws1NZ/haTAjfbMA=="],
 

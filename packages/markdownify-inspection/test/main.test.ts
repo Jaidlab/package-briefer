@@ -196,11 +196,11 @@ const expected = `# flatten-string 0.2.0
 
 ## package
 
-{"name":"flatten-string"}
+name flatten-string
 
 ## exports
 
-{"default":"function","named":{"flatten":"function"}}
+default function named { flatten function}
 
 # 3 npm releases
 
