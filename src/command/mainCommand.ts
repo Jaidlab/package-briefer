@@ -25,6 +25,26 @@ const mainCommand = defineCommand({
       default: false,
       description: 'Use Clank for structured llms.txt blocks',
     },
+    cacheSeconds: {
+      type: Number,
+      default: 300,
+      description: 'Inspection cache lifetime in seconds',
+    },
+    cacheItems: {
+      type: Number,
+      default: 100,
+      description: 'Maximum cached Inspection objects',
+    },
+    externalsCacheSeconds: {
+      type: Number,
+      default: 300,
+      description: 'External npm/npmx cache lifetime in seconds',
+    },
+    externalsCacheItems: {
+      type: Number,
+      default: 100,
+      description: 'Maximum items in each external cache',
+    },
     recentCommits: {
       type: Number,
       default: defaultSamplingOptions.recentCommits,

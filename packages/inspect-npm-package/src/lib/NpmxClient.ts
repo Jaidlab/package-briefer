@@ -1,3 +1,4 @@
+import type {ExternalCacheStorage} from './ExternalCacheStorage.ts'
 import type {FetchImplementation} from './NpmRegistryClient.ts'
 
 export type DependencyStats = {
@@ -12,18 +13,13 @@ type InstallSizeResponse = {
 }
 
 export class NpmxClient {
-  private readonly cache = new Map<string, Promise<DependencyStats | undefined>>
-
-  constructor(private readonly fetchImplementation: FetchImplementation = fetch) {}
+  constructor(private readonly fetchImplementation: FetchImplementation = fetch,
+    private readonly cache?: ExternalCacheStorage) {}
 
   getDependencyStats(packageName: string, version: string) {
     const key = `${packageName}@${version}`
-    let statsPromise = this.cache.get(key)
-    if (!statsPromise) {
-      statsPromise = this.fetchDependencyStats(packageName, version)
-      this.cache.set(key, statsPromise)
-    }
-    return statsPromise
+    const fetchStats = () => this.fetchDependencyStats(packageName, version)
+    return this.cache?.getOrSet(key, fetchStats) ?? fetchStats()
   }
 
   private async fetchDependencyStats(packageName: string, version: string): Promise<DependencyStats | undefined> {

@@ -9,6 +9,7 @@
         "clerc": "^1.3.1",
         "inspect-exports": "workspace:*",
         "inspect-npm-package": "workspace:*",
+        "lru-cache": "^11.5.2",
         "markdownify-inspection": "workspace:*",
       },
       "devDependencies": {
@@ -29,6 +30,7 @@
       "dependencies": {
         "@js-temporal/polyfill": "^0.5.1",
         "inspect-exports": "workspace:*",
+        "lru-cache": "^11.5.2",
         "type-fest": "^5.8.0",
       },
     },
@@ -361,6 +363,8 @@
     "locate-path": ["locate-path@6.0.0", "", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
     "lodash-es": ["lodash-es@4.18.1", "", {}, "sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A=="],
+
+    "lru-cache": ["lru-cache@11.5.2", "", {}, "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="],
 
     "markdownify-inspection": ["markdownify-inspection@workspace:packages/markdownify-inspection"],
 

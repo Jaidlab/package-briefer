@@ -142,6 +142,42 @@ test('passes the exports Docker daemon to the inspector', async () => {
     name: 'demo',
   })
 })
+test('caches Inspection objects but renders Markdown for every request', async () => {
+  inspectCalls.length = 0
+  let renders = 0
+  const server = new PackageBrieferServer(inspect, () => `render ${++renders}`, 60)
+  const request = new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt')
+  const firstResponse = await server.fetch(request)
+  expect(await firstResponse.text()).toBe('render 1')
+  const secondResponse = await server.fetch(request)
+  expect(await secondResponse.text()).toBe('render 2')
+  expect(inspectCalls).toHaveLength(1)
+})
+test('does not cache when cache-seconds is zero', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, markdownify, 0)
+  const request = new Request('http://127.0.0.1:944/npmjs.com/package/demo')
+  await server.fetch(request)
+  await server.fetch(request)
+  expect(inspectCalls).toHaveLength(2)
+})
+test('expires cached Inspection objects', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, markdownify, 0.01)
+  const request = new Request('http://127.0.0.1:944/npmjs.com/package/demo')
+  await server.fetch(request)
+  await Bun.sleep(20)
+  await server.fetch(request)
+  expect(inspectCalls).toHaveLength(2)
+})
+test('evicts least recently used Inspection objects at cache-items', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, markdownify, 60, {}, 1)
+  await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo'))
+  await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/other'))
+  await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo'))
+  expect(inspectCalls.map(call => call.name)).toEqual(['demo', 'other', 'demo'])
+})
 test('maps package-not-found errors to 404', async () => {
   const server = new PackageBrieferServer(inspect, markdownify, 0)
   const response = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/missing'))

@@ -1,3 +1,4 @@
+import type {ExternalCaches} from './lib/ExternalCacheStorage.ts'
 import type {FetchImplementation, NpmPackument, PackumentVersion} from './lib/NpmRegistryClient.ts'
 import type {BriefPackage, BriefRelease, FocusedRelease, Inspection, TaggedRelease} from './lib/types.ts'
 import type {Inspection as ExportsInspection, Options as InspectExportsOptions} from 'inspect-exports'
@@ -33,6 +34,7 @@ export const defaultSamplingOptions = {
 export type Options = SamplingOptions & {
   exportsDockerHost?: string
   exportsInspector?: ExportsInspector
+  externalCaches?: ExternalCaches
   fetch?: FetchImplementation
   githubToken?: string
   name: string
@@ -66,8 +68,8 @@ const getBriefPackage = (metadata: PackumentVersion): BriefPackage => {
 }
 const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   const fetchImplementation = options.fetch ?? fetch
-  const npm = new NpmRegistryClient(fetchImplementation)
-  const npmx = new NpmxClient(fetchImplementation)
+  const npm = new NpmRegistryClient(fetchImplementation, options.externalCaches?.npm)
+  const npmx = new NpmxClient(fetchImplementation, options.externalCaches?.npmx)
   const github = new GitHubClient(fetchImplementation, options.githubToken)
   const packument = await npm.getPackument(options.name)
   const versions = packument.versions ?? {}
@@ -204,6 +206,8 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   }
 }
 
+export {createExternalCaches, ExternalCacheStorage} from './lib/ExternalCacheStorage.ts'
+export type {ExternalCaches, ExternalCacheStorageOptions} from './lib/ExternalCacheStorage.ts'
 export {defaultGitHubInspectionOptions, getGitHubSlug, getRepositoryUrl, GitHubClient} from './lib/GitHubClient.ts'
 export type {GitHubInspectionOptions} from './lib/GitHubClient.ts'
 export {getTarStats, getTarUnpackedSize, NpmRegistryClient, PackageNotFoundError, PackageVersionNotFoundError} from './lib/NpmRegistryClient.ts'

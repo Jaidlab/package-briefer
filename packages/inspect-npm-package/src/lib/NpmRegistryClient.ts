@@ -1,3 +1,4 @@
+import type {ExternalCacheStorage} from './ExternalCacheStorage.ts'
 import type {BriefPackage} from './types.ts'
 
 import {gunzipSync} from 'node:zlib'
@@ -95,23 +96,25 @@ export const getTarUnpackedSize = async (response: Response) => {
 }
 
 export class NpmRegistryClient {
-  private readonly tarballStats = new Map<string, Promise<Required<ReleaseStats> | undefined>>
+  constructor(private readonly fetchImplementation: FetchImplementation = fetch,
+    private readonly cache?: ExternalCacheStorage) {}
 
-  constructor(private readonly fetchImplementation: FetchImplementation = fetch) {}
-
-  async getPackument(packageName: string) {
-    const response = await this.fetchImplementation(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`, {
-      headers: {
-        accept: 'application/json',
-      },
-    })
-    if (response.status === 404) {
-      throw new PackageNotFoundError(packageName)
+  getPackument(packageName: string) {
+    const fetchPackument = async () => {
+      const response = await this.fetchImplementation(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`, {
+        headers: {
+          accept: 'application/json',
+        },
+      })
+      if (response.status === 404) {
+        throw new PackageNotFoundError(packageName)
+      }
+      if (!response.ok) {
+        throw new Error(`Could not fetch npm package ${packageName}: HTTP ${response.status}`)
+      }
+      return response.json() as Promise<NpmPackument>
     }
-    if (!response.ok) {
-      throw new Error(`Could not fetch npm package ${packageName}: HTTP ${response.status}`)
-    }
-    return response.json() as Promise<NpmPackument>
+    return this.cache?.getOrSet(`packument:${packageName}`, fetchPackument) ?? fetchPackument()
   }
 
   async getReleaseStats(version: PackumentVersion): Promise<ReleaseStats> {
@@ -130,18 +133,13 @@ export class NpmRegistryClient {
         ...declaredSize === undefined ? {} : {size: declaredSize},
       }
     }
-    let statsPromise = this.tarballStats.get(tarball)
-    if (!statsPromise) {
-      statsPromise = (async () => {
-        try {
-          return await getTarStats(await this.fetchImplementation(tarball))
-        } catch {
-
-        }
-      })()
-      this.tarballStats.set(tarball, statsPromise)
+    const fetchTarballStats = async () => {
+      try {
+        return await getTarStats(await this.fetchImplementation(tarball))
+      } catch {
+      }
     }
-    const tarballStats = await statsPromise
+    const tarballStats = await (this.cache?.getOrSet(`tarball:${tarball}`, fetchTarballStats) ?? fetchTarballStats())
     const result: ReleaseStats = {}
     const files = declaredFiles ?? tarballStats?.files
     const size = declaredSize ?? tarballStats?.size

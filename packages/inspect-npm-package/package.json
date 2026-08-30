@@ -19,6 +19,7 @@
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
     "inspect-exports": "workspace:*",
+    "lru-cache": "^11.5.2",
     "type-fest": "^5.8.0"
   }
 }

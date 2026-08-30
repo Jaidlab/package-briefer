@@ -1,22 +1,17 @@
 import type {Inspection, Options as InspectNpmPackageOptions, SamplingOptions} from 'inspect-npm-package'
 
-import {Temporal} from '@js-temporal/polyfill'
 import inspectNpmPackage, {PackageNotFoundError, PackageVersionNotFoundError} from 'inspect-npm-package'
+import {LRUCache} from 'lru-cache'
 import markdownifyInspection from 'markdownify-inspection'
 
 const routePrefix = '/npmjs.com/package/'
 
-type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost'>
+type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches'>
 type Inspect = (options: InspectionOptions & {
   name: string
   version?: string
 }) => Promise<Inspection>
 type Markdownify = (inspection: Inspection) => string
-
-type CacheEntry = {
-  expiresAt: Temporal.Instant
-  value: Promise<Inspection>
-}
 
 type Route = {
   llms: boolean
@@ -136,12 +131,21 @@ export class PackageBrieferServer {
     }
   }
 
-  private readonly cache = new Map<string, CacheEntry>
+  private readonly cache?: LRUCache<string, Inspection>
 
   constructor(private readonly inspect: Inspect = inspectNpmPackage,
     private readonly markdownify: Markdownify = markdownifyInspection,
-    private readonly cacheTtlMs = 300_000,
-    private readonly inspectionOptions: InspectionOptions = {}) {}
+    cacheSeconds = 0,
+    private readonly inspectionOptions: InspectionOptions = {},
+    cacheItems = 100) {
+    if (cacheSeconds > 0 && cacheItems > 0) {
+      this.cache = new LRUCache({
+        max: cacheItems,
+        ttl: cacheSeconds * 1000,
+        ttlAutopurge: true,
+      })
+    }
+  }
 
   listen(options: {
     hostname?: string
@@ -155,27 +159,18 @@ export class PackageBrieferServer {
   }
 
   private async getInspection(packageName: string, version?: string) {
-    const now = Temporal.Now.instant()
     const cacheKey = `${packageName}\0${version ?? ''}`
-    const cached = this.cache.get(cacheKey)
-    if (cached && Temporal.Instant.compare(cached.expiresAt, now) > 0) {
-      return cached.value
+    const cached = this.cache?.get(cacheKey)
+    if (cached) {
+      return cached
     }
-    const value = this.inspect({
+    const inspection = await this.inspect({
       ...this.inspectionOptions,
       name: packageName,
       ...version === undefined ? {} : {version},
     })
-    this.cache.set(cacheKey, {
-      expiresAt: now.add({milliseconds: this.cacheTtlMs}),
-      value,
-    })
-    try {
-      return await value
-    } catch (error) {
-      this.cache.delete(cacheKey)
-      throw error
-    }
+    this.cache?.set(cacheKey, inspection)
+    return inspection
   }
 }
 
