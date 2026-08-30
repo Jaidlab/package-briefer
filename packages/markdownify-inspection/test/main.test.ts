@@ -196,11 +196,11 @@ const expected = `# flatten-string 0.2.0
 
 ## package
 
-name flatten-string
+{"name":"flatten-string"}
 
 ## exports
 
-default function named { flatten function}
+{"default":"function","named":{"flatten":"function"}}
 
 # 3 npm releases
 
@@ -326,6 +326,17 @@ company Jaid Labs
 `
 test('markdownifies an inspection with tag history', () => {
   expect(markdownifyInspection(inspection, {now})).toBe(expected)
+})
+test('uses Clank for structured blocks when enabled', () => {
+  const markdown = markdownifyInspection(inspection, {
+    clank: true,
+    now,
+  })
+  expect(markdown).toContain('# flatten-string 0.2.0\n\npackage { name flatten-string}\n\nexports { default function named { flatten function}}\n\n# 3 npm releases')
+  expect(markdown).toContain("### jaid\n\n3 commits\nprofile { company 'Jaid Labs' followers 42 location Berlin name Jaid repositories 76}\n")
+  expect(markdown).not.toContain('## package')
+  expect(markdown).not.toContain('## exports')
+  expect(markdown).not.toContain('#### profile')
 })
 test('includes npm metadata when the focused release is not visible', () => {
   const markdown = markdownifyInspection({

@@ -1,6 +1,8 @@
 import type mainCommand from './mainCommand.ts'
 import type {CommandHandler} from 'clerc'
 
+import markdownifyInspection from 'markdownify-inspection'
+
 import {PackageBrieferServer} from '../PackageBrieferServer.ts'
 
 const assertInteger = (name: string, value: number, minimum = 0) => {
@@ -30,7 +32,8 @@ export const run: CommandHandler<typeof mainCommand> = async context => {
     ...samplingOptions,
     ...flags.dockerHost === undefined ? {} : {exportsDockerHost: flags.dockerHost},
   }
-  const server = new PackageBrieferServer(undefined, undefined, undefined, inspectionOptions).listen({
+  const markdownify = flags.clank ? (inspection: Parameters<typeof markdownifyInspection>[0]) => markdownifyInspection(inspection, {clank: true}) : undefined
+  const server = new PackageBrieferServer(undefined, markdownify, undefined, inspectionOptions).listen({
     hostname: flags.httpHostname,
     port: flags.httpPort,
   })

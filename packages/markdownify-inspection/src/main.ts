@@ -4,6 +4,7 @@ import {Temporal} from '@js-temporal/polyfill'
 import stringifyClank from 'stringify-clank'
 
 export type Options = {
+  clank?: boolean
   now?: Temporal.Instant
   recentSeconds?: number
 }
@@ -149,9 +150,16 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
     }
     lines.push('')
   }
-  lines.push('## package', '', stringifyClank(focusedRelease.package), '')
-  if (inspection.exports) {
-    lines.push('## exports', '', stringifyClank(inspection.exports), '')
+  if (options.clank) {
+    lines.push(stringifyClank({package: focusedRelease.package}), '')
+    if (inspection.exports) {
+      lines.push(stringifyClank({exports: inspection.exports}), '')
+    }
+  } else {
+    lines.push('## package', '', JSON.stringify(focusedRelease.package), '')
+    if (inspection.exports) {
+      lines.push('## exports', '', JSON.stringify(inspection.exports), '')
+    }
   }
   lines.push(`# ${inspection.releases.total} npm releases`, '', '## tags', '')
   for (const [tag, release] of Object.entries(inspection.releases.tags)) {
@@ -206,28 +214,35 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
       if (repository.contributors && repository.contributorSample.length) {
         lines.push(`## ${pluralize(repository.contributors, 'contributor')}`, '')
         for (const contributor of repository.contributorSample) {
-          lines.push(`### ${contributor.name}`, '', pluralize(contributor.commits, 'commit'), '')
+          lines.push(`### ${contributor.name}`, '', pluralize(contributor.commits, 'commit'))
           if (contributor.profile) {
-            const profile = contributor.profile
-            const profileLines: Array<string> = []
-            if (profile.name) {
-              profileLines.push(`name ${profile.name}`)
+            if (options.clank) {
+              lines.push(stringifyClank({profile: contributor.profile}), '')
+            } else {
+              lines.push('')
+              const profile = contributor.profile
+              const profileLines: Array<string> = []
+              if (profile.name) {
+                profileLines.push(`name ${profile.name}`)
+              }
+              if (profile.location) {
+                profileLines.push(`location ${profile.location}`)
+              }
+              if (profile.company) {
+                profileLines.push(`company ${profile.company}`)
+              }
+              if (profile.repositories) {
+                profileLines.push(pluralize(profile.repositories, 'repository', 'repositories'))
+              }
+              if (profile.followers) {
+                profileLines.push(pluralize(profile.followers, 'follower'))
+              }
+              if (profileLines.length) {
+                lines.push('#### profile', '', ...profileLines, '')
+              }
             }
-            if (profile.location) {
-              profileLines.push(`location ${profile.location}`)
-            }
-            if (profile.company) {
-              profileLines.push(`company ${profile.company}`)
-            }
-            if (profile.repositories) {
-              profileLines.push(pluralize(profile.repositories, 'repository', 'repositories'))
-            }
-            if (profile.followers) {
-              profileLines.push(pluralize(profile.followers, 'follower'))
-            }
-            if (profileLines.length) {
-              lines.push('#### profile', '', ...profileLines, '')
-            }
+          } else {
+            lines.push('')
           }
         }
       }

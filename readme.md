@@ -13,7 +13,8 @@ CLI options:
 ```text
 --http-hostname <hostname>                   HTTP hostname (default: 127.0.0.1)
 --http-port <port>                           HTTP port (default: 944)
---docker-host <host>                  Docker daemon for runtime export inspection
+--docker-host <host>                         Docker daemon for runtime export inspection
+--clank                                      Use Clank for structured llms.txt blocks
 --recent-commits <integer>                   Recent GitHub commits (default: 3)
 --recently-created-pull-requests <integer>   Recently created GitHub pull requests (default: 5)
 --recently-updated-pull-requests <integer>   Recently updated GitHub pull requests (default: 5)
@@ -48,3 +49,7 @@ Scoped packages are supported as well.
 - `GITHUB_TOKEN` or `GH_TOKEN` – optional GitHub token for higher API rate limits.
 
 Responses are cached in memory for 5 minutes. Release sizes use npm’s `dist.unpackedSize` when available and fall back to calculating the unpacked tarball size for older releases. If a fallback tarball is missing, unreadable or corrupt, the `size` property is omitted instead of failing the package response. Release dates contain both absolute UTC and relative forms. `focused` contains the selected release and package.json metadata. It defaults to npm’s `latest` tag and can be selected explicitly with `/v/<version>`; tags and `first` remain brief releases. Non-GitHub repository URLs are preserved as `{url}`. GitHub `issues` counts open issues and excludes pull requests.
+
+## Clank output
+
+Pass `--clank` to render structured `llms.txt` blocks in Clank. Without it, package and exports metadata retain the JSON sections.

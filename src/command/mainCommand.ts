@@ -20,6 +20,11 @@ const mainCommand = defineCommand({
       default: Bun.env.DOCKER_HOST ?? Bun.env.EXPORTS_DOCKER_HOST,
       description: 'Docker daemon used for runtime export inspection',
     },
+    clank: {
+      type: Boolean,
+      default: false,
+      description: 'Use Clank for structured llms.txt blocks',
+    },
     recentCommits: {
       type: Number,
       default: defaultSamplingOptions.recentCommits,
