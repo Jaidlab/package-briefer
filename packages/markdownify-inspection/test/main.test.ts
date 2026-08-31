@@ -8,9 +8,14 @@ import markdownifyInspection from '../src/main.ts'
 
 const inspection: Inspection = {
   exports: {
-    default: 'function',
-    named: {
-      flatten: 'function',
+    '.': {
+      default: 'function',
+      named: {
+        flatten: 'function',
+      },
+    },
+    './lines': {
+      default: 'function',
     },
   },
   focused: {
@@ -200,7 +205,13 @@ const expected = `# flatten-string 0.2.0
 
 ## exports
 
+### flatten-string
+
 {"default":"function","named":{"flatten":"function"}}
+
+### flatten-string/lines
+
+{"default":"function"}
 
 # 3 npm releases
 
@@ -332,11 +343,112 @@ test('uses Clank for structured blocks when enabled', () => {
     clank: true,
     now,
   })
-  expect(markdown).toContain('# flatten-string 0.2.0\n\npackage { name flatten-string}\n\nexports { default function named { flatten function}}\n\n# 3 npm releases')
+  expect(markdown).toContain('# flatten-string 0.2.0\n\npackage { name flatten-string}\n\n## exports\n\n### default\n\nfunction\n\n### named\n\nflatten function\n\n## subpackage exports\n\n### lines\n\n#### default\n\nfunction\n\n# 3 npm releases')
   expect(markdown).toContain("### jaid\n\n3 commits\nprofile { company 'Jaid Labs' followers 42 location Berlin name Jaid repositories 76}\n")
   expect(markdown).not.toContain('## package')
-  expect(markdown).not.toContain('## exports')
+  expect(markdown).toContain('## exports')
   expect(markdown).not.toContain('#### profile')
+})
+test('uses semantic headings for default or named multi-path exports', () => {
+  const multiPathInspection: Inspection = {
+    ...inspection,
+    exports: {
+      '.': {
+        default_or_named: {
+          flatten: 'function',
+        },
+      },
+      './lines': {
+        default_or_named: {
+          lines: 'function',
+        },
+      },
+    },
+  }
+  const markdown = markdownifyInspection(multiPathInspection, {
+    clank: true,
+    now,
+  })
+  expect(markdown).toContain('## exports\n\n### default or named\n\nflatten function\n\n## subpackage exports\n\n### lines\n\n#### default or named\n\nlines function')
+  expect(markdown).not.toContain('default+named')
+  expect(markdown).not.toContain('default_or_named')
+})
+test('omits the root export path wrapper when it is the only entry point', () => {
+  const rootOnlyInspection: Inspection = {
+    ...inspection,
+    exports: {
+      '.': inspection.exports?.['.'] ?? {},
+    },
+  }
+  const markdown = markdownifyInspection(rootOnlyInspection, {now})
+  expect(markdown).toContain('## exports\n\n{"default":"function","named":{"flatten":"function"}}')
+  const clank = markdownifyInspection(rootOnlyInspection, {
+    clank: true,
+    now,
+  })
+  expect(clank).toContain('## exports\n\n### default\n\nfunction\n\n### named\n\nflatten function')
+  expect(clank).not.toContain('exports {')
+})
+test('renames default_or_named in export summaries', () => {
+  const rootOnlyInspection: Inspection = {
+    ...inspection,
+    exports: {
+      '.': {
+        default_or_named: {
+          flatten: 'function',
+        },
+      },
+    },
+  }
+  const markdown = markdownifyInspection(rootOnlyInspection, {now})
+  expect(markdown).toContain('## exports\n\n{"default+named":{"flatten":"function"}}')
+  const clank = markdownifyInspection(rootOnlyInspection, {
+    clank: true,
+    now,
+  })
+  expect(clank).toContain('## exports\n\n### default or named\n\nflatten function')
+  expect(clank).not.toContain('default+named')
+  expect(clank).not.toContain('default_or_named')
+})
+test('simplifies runtime export value descriptors in Markdown', () => {
+  const descriptorInspection: Inspection = {
+    ...inspection,
+    exports: {
+      '.': {
+        default_or_named: {
+          Children: {
+            type: 'object',
+            keys: ['map', 'forEach', 'count'],
+          },
+          version: {
+            type: 'string',
+            value: '19.2.8',
+          },
+        },
+      },
+      './runtime': {
+        named: {
+          internals: {
+            type: 'object',
+            keys: 42,
+          },
+        },
+      },
+    },
+  }
+  const clank = markdownifyInspection(descriptorInspection, {
+    clank: true,
+    now,
+  })
+  expect(clank).toContain('### default or named\n\nChildren { entries [ map forEach count]} version { string 19.2.8}')
+  expect(clank).toContain('#### named\n\ninternals { entries 42}')
+  expect(clank).not.toContain('type object')
+  expect(clank).not.toContain('type string')
+  const markdown = markdownifyInspection({
+    ...descriptorInspection,
+    exports: {'.': descriptorInspection.exports?.['.'] ?? {}},
+  }, {now})
+  expect(markdown).toContain('{"default+named":{"Children":{"entries":["map","forEach","count"]},"version":{"string":"19.2.8"}}}')
 })
 test('includes npm metadata when the focused release is not visible', () => {
   const markdown = markdownifyInspection({
