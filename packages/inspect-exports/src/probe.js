@@ -7,10 +7,7 @@ const packageFolder = `${process.cwd()}/node_modules/${moduleName}`
 const packageJson = await Bun.file(`${packageFolder}/package.json`).json()
 
 const peerDependencies = packageJson.peerDependencies ?? {}
-const peerDependenciesMeta = packageJson.peerDependenciesMeta ?? {}
-const peerSpecs = Object.entries(peerDependencies)
-  .filter(([name]) => peerDependenciesMeta[name]?.optional !== true)
-  .map(([name, range]) => `${name}@${range}`)
+const peerSpecs = Object.entries(peerDependencies).map(([name, range]) => `${name}@${range}`)
 if (peerSpecs.length) {
   const peerInstall = Bun.spawn([process.execPath, 'add', ...peerSpecs], {
     stderr: 'ignore',

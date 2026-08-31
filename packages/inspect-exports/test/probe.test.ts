@@ -110,11 +110,14 @@ test('inspects only the package root when exports is absent', async () => {
     },
   })
 })
-test('installs required peer dependencies before inspecting exports', async () => {
+test('installs declared peer dependencies before inspecting exports', async () => {
   expect(await runProbe({
     exports: './index.js',
     peerDependencies: {
       'peer-demo': 'file:./peer-demo',
+    },
+    peerDependenciesMeta: {
+      'peer-demo': {optional: true},
     },
   }, {
     'index.js': "export {version} from 'peer-demo'",
