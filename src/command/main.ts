@@ -2,7 +2,6 @@ import type mainCommand from './mainCommand.ts'
 import type {CommandHandler} from 'clerc'
 
 import {createExternalCaches} from 'inspect-npm-package'
-import markdownifyInspection from 'markdownify-inspection'
 
 import {PackageBrieferServer} from '../PackageBrieferServer.ts'
 
@@ -47,8 +46,7 @@ export const run: CommandHandler<typeof mainCommand> = async context => {
     ...externalCaches === undefined ? {} : {externalCaches},
     ...flags.dockerHost === undefined ? {} : {exportsDockerHost: flags.dockerHost},
   }
-  const markdownify = flags.clank ? (inspection: Parameters<typeof markdownifyInspection>[0]) => markdownifyInspection(inspection, {clank: true}) : undefined
-  const server = new PackageBrieferServer(undefined, markdownify, flags.cacheSeconds, inspectionOptions, flags.cacheItems).listen({
+  const server = new PackageBrieferServer(undefined, undefined, flags.cacheSeconds, inspectionOptions, flags.cacheItems, flags.clank).listen({
     hostname: flags.httpHostname,
     port: flags.httpPort,
   })

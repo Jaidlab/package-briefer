@@ -52,6 +52,19 @@ const inspect = async (options: InspectOptions) => {
   return inspection
 }
 const markdownify = () => '# demo 1.0.0\n'
+const renderClank = (_inspection: Inspection, options?: {clank?: boolean}) => String(options?.clank)
+test('serves the HTML homepage', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, markdownify, 0)
+  const response = await server.fetch(new Request('http://127.0.0.1:944/'))
+  expect(response.status).toBe(200)
+  expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
+  const html = await response.text()
+  expect(html).toContain('<a href="/npmjs.com/package/es-toolkit">/npmjs.com/package/es-toolkit</a>')
+  expect(html).toContain('<a href="/npmjs.com/package/ai/llms.txt">/npmjs.com/package/ai/llms.txt</a>')
+  expect(html).toContain('<a href="/npmjs.com/package/@react-three/drei/v/11.0.0-alpha.5/llms.txt">/npmjs.com/package/@react-three/drei/v/11.0.0-alpha.5/llms.txt</a>')
+  expect(inspectCalls).toHaveLength(0)
+})
 test('serves raw JSON inspection', async () => {
   inspectCalls.length = 0
   const server = new PackageBrieferServer(inspect, markdownify, 0)
@@ -68,6 +81,24 @@ test('serves llms.txt', async () => {
   expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8')
   expect(await response.text()).toBe('# demo 1.0.0\n')
   expect(inspectCalls.at(-1)).toEqual({name: 'demo'})
+})
+test('overrides Clank rendering per request', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, renderClank, 0, {}, 100, false)
+  const enabled = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=true'))
+  expect(await enabled.text()).toBe('true')
+  const disabled = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=false'))
+  expect(await disabled.text()).toBe('false')
+})
+test('uses the server Clank default when the query override is absent or invalid', async () => {
+  inspectCalls.length = 0
+  const server = new PackageBrieferServer(inspect, renderClank, 0, {}, 100, true)
+  const defaultResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt'))
+  expect(await defaultResponse.text()).toBe('true')
+  const invalidResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=yes'))
+  expect(await invalidResponse.text()).toBe('true')
+  const overriddenResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=false'))
+  expect(await overriddenResponse.text()).toBe('false')
 })
 test('serves a focused version as JSON', async () => {
   inspectCalls.length = 0

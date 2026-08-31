@@ -324,14 +324,18 @@ test('inspects npm package metadata', async () => {
         version: '2.0.0',
       })
       return {
-        named: {foo: 'function'},
+        '.': {
+          named: {foo: 'function'},
+        },
       }
     },
   })
   expect(Object.keys(inspection.releases.tags)).toEqual(['beta', 'latest'])
   expect(inspection).toEqual({
     exports: {
-      named: {foo: 'function'},
+      '.': {
+        named: {foo: 'function'},
+      },
     },
     focused: {
       version: '2.0.0',
@@ -583,13 +587,13 @@ test('focuses an explicit version', async () => {
     now,
     exportsInspector: async options => {
       inspectedVersion = options.version
-      return {default: 'function'}
+      return {'.': {default: 'function'}}
     },
   })
   expect(inspectedVersion).toBe('1.5.0')
   expect(inspection.focused.version).toBe('1.5.0')
   expect(inspection.focused.package).toEqual({})
-  expect(inspection.exports).toEqual({default: 'function'})
+  expect(inspection.exports).toEqual({'.': {default: 'function'}})
 })
 test('throws PackageVersionNotFoundError', async () => {
   await expect(inspectNpmPackage({

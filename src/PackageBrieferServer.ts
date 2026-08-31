@@ -4,6 +4,9 @@ import inspectNpmPackage, {PackageNotFoundError, PackageVersionNotFoundError} fr
 import {LRUCache} from 'lru-cache'
 import markdownifyInspection from 'markdownify-inspection'
 
+import homepage from './homepage.html' with {type: 'text'}
+
+const homepageText = homepage as unknown as string
 const routePrefix = '/npmjs.com/package/'
 
 type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches'>
@@ -11,7 +14,7 @@ type Inspect = (options: InspectionOptions & {
   name: string
   version?: string
 }) => Promise<Inspection>
-type Markdownify = (inspection: Inspection) => string
+type Markdownify = (inspection: Inspection, options?: {clank?: boolean}) => string
 
 type Route = {
   llms: boolean
@@ -86,6 +89,16 @@ const parseRoute = (url: URL): Route | undefined => {
     }
   }
 }
+const getClank = (url: URL, defaultClank: boolean) => {
+  const value = url.searchParams.get('clank')
+  if (value === 'true') {
+    return true
+  }
+  if (value === 'false') {
+    return false
+  }
+  return defaultClank
+}
 const errorResponse = (message: string, status: number, llms: boolean) => {
   if (llms) {
     return new Response(`# Error\n\n${message}\n`, {
@@ -99,6 +112,20 @@ const errorResponse = (message: string, status: number, llms: boolean) => {
 export class PackageBrieferServer {
   fetch = async (request: Request) => {
     const url = new URL(request.url)
+    if (url.pathname === '/') {
+      if (request.method !== 'GET') {
+        return new Response(null, {
+          status: 405,
+          headers: {allow: 'GET'},
+        })
+      }
+      return new Response(homepageText, {
+        headers: {
+          'access-control-allow-origin': '*',
+          'content-type': 'text/html; charset=utf-8',
+        },
+      })
+    }
     const route = parseRoute(url)
     if (!route) {
       return errorResponse(`Use ${routePrefix}<package>[/v/<version>][/llms.txt]`, 404, false)
@@ -112,7 +139,7 @@ export class PackageBrieferServer {
     try {
       const inspection = await this.getInspection(route.packageName, route.version)
       if (route.llms) {
-        return new Response(this.markdownify(inspection), {
+        return new Response(this.markdownify(inspection, {clank: getClank(url, this.defaultClank)}), {
           headers: {
             'access-control-allow-origin': '*',
             'content-type': 'text/plain; charset=utf-8',
@@ -137,7 +164,8 @@ export class PackageBrieferServer {
     private readonly markdownify: Markdownify = markdownifyInspection,
     cacheSeconds = 0,
     private readonly inspectionOptions: InspectionOptions = {},
-    cacheItems = 100) {
+    cacheItems = 100,
+    private readonly defaultClank = false) {
     if (cacheSeconds > 0 && cacheItems > 0) {
       this.cache = new LRUCache({
         max: cacheItems,
