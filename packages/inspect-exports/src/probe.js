@@ -1,0 +1,158 @@
+const moduleName = Bun.env.PACKAGE_NAME
+if (!moduleName) {
+  throw new Error('PACKAGE_NAME is required')
+}
+
+const packageFolder = `${process.cwd()}/node_modules/${moduleName}`
+const packageJson = await Bun.file(`${packageFolder}/package.json`).json()
+
+const peerDependencies = packageJson.peerDependencies ?? {}
+const peerDependenciesMeta = packageJson.peerDependenciesMeta ?? {}
+const peerSpecs = Object.entries(peerDependencies)
+  .filter(([name]) => peerDependenciesMeta[name]?.optional !== true)
+  .map(([name, range]) => `${name}@${range}`)
+if (peerSpecs.length) {
+  const peerInstall = Bun.spawn([process.execPath, 'add', ...peerSpecs], {
+    stderr: 'ignore',
+    stdout: 'ignore',
+  })
+  const exitCode = await peerInstall.exited
+  if (exitCode !== 0) {
+    throw new Error(`Could not install peer dependencies for ${moduleName}`)
+  }
+}
+
+const describe = value => {
+  if (typeof value === 'string') {
+    return value.length < 100 ? {type: 'string', value} : {type: 'string', length: value.length}
+  }
+  if (Array.isArray(value)) {
+    return {type: 'array', length: value.length}
+  }
+  if (value !== null && typeof value === 'object') {
+    const keys = Object.keys(value)
+    return {type: 'object', keys: keys.length > 20 ? keys.length : keys}
+  }
+  if (typeof value === 'function') {
+    if (value.constructor?.name === 'AsyncFunction') {
+      return 'async function'
+    }
+    try {
+      Reflect.construct(String, [], value)
+      return 'class'
+    } catch {
+      return 'function'
+    }
+  }
+  return typeof value
+}
+
+const inspectModule = async specifier => {
+  const resolved = Bun.resolveSync(specifier, process.cwd())
+  if (resolved.replaceAll('\\', '/').endsWith('/package.json')) {
+    return
+  }
+  const module = await import(resolved)
+  const {default: defaultExport, ...named} = module
+  const commonJs = defaultExport && typeof defaultExport === 'object' && Object.entries(named).every(([key, value]) => defaultExport[key] === value)
+  const namedInspection = Object.fromEntries(Object.entries(named).map(([key, value]) => [key, describe(value)]))
+  return commonJs ? {default_or_named: namedInspection} : {
+    ...(defaultExport !== undefined ? {default: describe(defaultExport)} : {}),
+    ...(Object.keys(named).length ? {named: namedInspection} : {}),
+  }
+}
+
+const collectTargets = (value, targets = []) => {
+  if (typeof value === 'string') {
+    targets.push(value)
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      collectTargets(item, targets)
+    }
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      collectTargets(item, targets)
+    }
+  }
+  return targets
+}
+
+const escapeRegExp = value => value.replace(/[.*+?^()|[\]{}$\\]/gu, '\\$&')
+const getPatternCapture = (pattern, file) => {
+  const parts = pattern.split('*')
+  if (parts.length < 2) {
+    return
+  }
+  let source = `^${escapeRegExp(parts[0])}(.*)${escapeRegExp(parts[1])}`
+  for (const part of parts.slice(2)) {
+    source += `\\1${escapeRegExp(part)}`
+  }
+  source += '$'
+  return new RegExp(source, 'u').exec(file)?.[1]
+}
+
+const paths = []
+const seenPaths = new Set
+const addPath = path => {
+  if (!seenPaths.has(path)) {
+    seenPaths.add(path)
+    paths.push(path)
+  }
+}
+const expandPattern = async (exportPath, target) => {
+  if (!target.startsWith('./') || !target.includes('*')) {
+    return
+  }
+  const targetPattern = target.slice(2)
+  const files = []
+  const glob = new Bun.Glob(targetPattern)
+  for await (const file of glob.scan({
+    cwd: packageFolder,
+    dot: true,
+    followSymlinks: false,
+    onlyFiles: true,
+  })) {
+    files.push(file.replaceAll('\\', '/'))
+  }
+  files.sort()
+  for (const file of files) {
+    const capture = getPatternCapture(targetPattern, file)
+    if (capture !== undefined) {
+      addPath(exportPath.replaceAll('*', capture))
+    }
+  }
+}
+
+const exportsField = packageJson.exports
+const hasSubpathExports = exportsField && typeof exportsField === 'object' && !Array.isArray(exportsField) && Object.keys(exportsField).some(key => key.startsWith('.'))
+const exportEntries = exportsField === undefined
+  ? [['.', undefined]]
+  : hasSubpathExports
+    ? Object.entries(exportsField)
+    : [['.', exportsField]]
+
+for (const [exportPath, target] of exportEntries) {
+  if (exportPath !== '.' && !exportPath.startsWith('./')) {
+    continue
+  }
+  if (!exportPath.includes('*')) {
+    addPath(exportPath)
+    continue
+  }
+  for (const targetPattern of collectTargets(target)) {
+    await expandPattern(exportPath, targetPattern)
+  }
+}
+
+const inspection = {}
+for (const exportPath of paths) {
+  const specifier = exportPath === '.' ? moduleName : `${moduleName}${exportPath.slice(1)}`
+  try {
+    const moduleInspection = await inspectModule(specifier)
+    if (moduleInspection) {
+      inspection[exportPath] = moduleInspection
+    }
+  } catch {
+  }
+}
+console.log(JSON.stringify(inspection))

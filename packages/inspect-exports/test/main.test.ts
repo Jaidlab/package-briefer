@@ -5,11 +5,13 @@ import {expect, test} from 'bun:test'
 import inspectExports from '../src/main.ts'
 
 const inspection = {
-  named: {
-    foo: 'function',
-    name: {
-      type: 'string',
-      value: 'demo',
+  '.': {
+    named: {
+      foo: 'function',
+      name: {
+        type: 'string',
+        value: 'demo',
+      },
     },
   },
 } as const
@@ -90,18 +92,22 @@ test('describes constructable functions as classes', async () => {
     name: 'demo',
     version: '1.0.0',
     containerRunner: async () => JSON.stringify({
+      '.': {
+        named: {
+          Demo: 'class',
+          arrow: 'function',
+          asyncValue: 'async function',
+        },
+      },
+    }),
+  })
+  expect(result).toEqual({
+    '.': {
       named: {
         Demo: 'class',
         arrow: 'function',
         asyncValue: 'async function',
       },
-    }),
-  })
-  expect(result).toEqual({
-    named: {
-      Demo: 'class',
-      arrow: 'function',
-      asyncValue: 'async function',
     },
   })
 })

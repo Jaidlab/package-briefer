@@ -25,11 +25,13 @@ export type ExportValue
   | 'symbol'
   | 'undefined'
 
-export type Inspection = {
+export type ModuleInspection = {
   default?: ExportValue
   default_or_named?: Record<string, ExportValue>
   named?: Record<string, ExportValue>
 }
+
+export type Inspection = Record<string, ModuleInspection>
 
 export type FetchImplementation = (input: Request | URL | string, init?: RequestInit) => Promise<Response>
 
@@ -55,40 +57,6 @@ export type Options = {
 
 const defaultImage = 'oven/bun:slim'
 const defaultTimeoutMs = 120_000
-const probe = `const moduleName = Bun.env.PACKAGE_NAME
-if (!moduleName) throw new Error('PACKAGE_NAME is required')
-const m = await import(moduleName)
-const describe = value => {
-  if (typeof value === 'string') {
-    return value.length < 100 ? {type: 'string', value} : {type: 'string', length: value.length}
-  }
-  if (Array.isArray(value)) {
-    return {type: 'array', length: value.length}
-  }
-  if (value !== null && typeof value === 'object') {
-    const keys = Object.keys(value)
-    return {type: 'object', keys: keys.length > 20 ? keys.length : keys}
-  }
-  if (typeof value === 'function') {
-    if (value.constructor?.name === 'AsyncFunction') {
-      return 'async function'
-    }
-    try {
-      Reflect.construct(String, [], value)
-      return 'class'
-    } catch {
-      return 'function'
-    }
-  }
-  return typeof value
-}
-const {default: defaultExport, ...named} = m
-const commonJs = defaultExport && typeof defaultExport === 'object' && Object.entries(named).every(([key, value]) => defaultExport[key] === value)
-const namedInspection = Object.fromEntries(Object.entries(named).map(([key, value]) => [key, describe(value)]))
-console.log(JSON.stringify(commonJs ? {default_or_named: namedInspection} : {
-  ...(defaultExport !== undefined ? {default: describe(defaultExport)} : {}),
-  ...(Object.keys(named).length ? {named: namedInspection} : {}),
-}))`
 const executeDocker = async (args: Array<string>, timeoutMs: number, dockerHost?: string) => {
   const dockerArgs = dockerHost ? ['--host', dockerHost, ...args] : args
   const process = Bun.spawn(['docker', ...dockerArgs], {
@@ -119,6 +87,7 @@ const executeDocker = async (args: Array<string>, timeoutMs: number, dockerHost?
 }
 
 export const runContainer: ContainerRunner = async options => {
+  const probe = await Bun.file(new URL('probe.js', import.meta.url)).text()
   const containerName = `inspect-exports-${crypto.randomUUID()}`
   const packageSpec = `${options.name}@${options.version}`
   try {
@@ -177,7 +146,7 @@ const inspectExports = async (options: Options): Promise<Inspection | undefined>
     if (!inspection || typeof inspection !== 'object' || Array.isArray(inspection)) {
       return
     }
-    return inspection
+    return inspection as Inspection
   } catch {
   }
 }
