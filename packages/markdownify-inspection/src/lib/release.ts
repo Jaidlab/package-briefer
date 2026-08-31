@@ -1,5 +1,6 @@
 import type {Temporal} from '@js-temporal/polyfill'
 import type {BriefRelease, Inspection} from 'inspect-npm-package'
+import type MarkdownMap from 'markdown-map'
 
 import flattenString from 'flatten-string'
 
@@ -36,7 +37,11 @@ export const getVisibleReleaseVersions = (inspection: Inspection) => {
   return versions
 }
 
-export const pushRelease = (paragraphs: Array<string>, release: BriefRelease, now: Temporal.Instant, recentSeconds: number) => {
-  paragraphs.push(`#### ${release.version}`)
-  paragraphs.push(flattenString.lines(formatDate(release.date, now, recentSeconds), formatReleaseStats(release), formatDependencies(release)))
+export const pushRelease = (markdown: MarkdownMap, parentSection: Array<string>, release: BriefRelease, now: Temporal.Instant, recentSeconds: number, options: {priority?: number} = {}) => {
+  const content = flattenString.lines(formatDate(release.date, now, recentSeconds), formatReleaseStats(release), formatDependencies(release))
+  const releaseSection = [...parentSection, release.version]
+  markdown.extendSection(releaseSection, content)
+  if (options.priority !== undefined) {
+    markdown.setSectionPriority(releaseSection, options.priority)
+  }
 }

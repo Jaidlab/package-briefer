@@ -1,4 +1,5 @@
 import type {Inspection} from 'inspect-npm-package'
+import type MarkdownMap from 'markdown-map'
 
 import stringifyClank from 'stringify-clank'
 
@@ -16,6 +17,9 @@ const summarizeExportValue = (value: unknown): Clankable => {
     if (typeof keys === 'number' || Array.isArray(keys) && keys.every((key): key is string => typeof key === 'string')) {
       return {entries: keys}
     }
+  }
+  if (record.type === 'array' && typeof record.length === 'number') {
+    return {items: record.length}
   }
   if (record.type === 'string' && typeof record.value === 'string') {
     return {string: record.value}
@@ -35,40 +39,42 @@ const getExportSpecifier = (packageName: string, exportPath: string) => {
 const getExportKindTitle = (kind: string) => {
   return kind === 'default_or_named' ? 'default or named' : kind
 }
-const pushClankModuleExports = (paragraphs: Array<string>, moduleInspection: ModuleInspection, headingLevel: number) => {
+const pushClankModuleExports = (markdown: MarkdownMap, parentSection: Array<string>, moduleInspection: ModuleInspection) => {
   for (const [kind, value] of Object.entries(moduleInspection)) {
-    paragraphs.push(`${'#'.repeat(headingLevel)} ${getExportKindTitle(kind)}`, stringifyClank(summarizeExportValue(value)))
+    markdown.extendSection([...parentSection, getExportKindTitle(kind)], stringifyClank(summarizeExportValue(value)))
   }
 }
-const pushClankExports = (paragraphs: Array<string>, exportsInspection: ExportsInspection) => {
+const pushClankExports = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection) => {
   const rootEntry = Object.entries(exportsInspection).find(([exportPath]) => exportPath === '.')
   if (rootEntry) {
-    paragraphs.push('## exports')
-    pushClankModuleExports(paragraphs, rootEntry[1], 3)
+    const exportsSection = [packageSection, 'exports']
+    markdown.ensureSection(exportsSection)
+    pushClankModuleExports(markdown, exportsSection, rootEntry[1])
   }
   const subpackages = Object.entries(exportsInspection).filter(([exportPath]) => exportPath !== '.')
   if (subpackages.length) {
-    paragraphs.push('## subpackage exports')
+    const subpackageExportsSection = [packageSection, 'subpackage exports']
     for (const [exportPath, moduleInspection] of subpackages) {
-      paragraphs.push(`### ${exportPath.replace(/^\.\//u, '')}`)
-      pushClankModuleExports(paragraphs, moduleInspection, 4)
+      const exportSection = [...subpackageExportsSection, exportPath.replace(/^\.\//u, '')]
+      markdown.ensureSection(exportSection)
+      pushClankModuleExports(markdown, exportSection, moduleInspection)
     }
   }
 }
 
-export const pushExports = (paragraphs: Array<string>, exportsInspection: ExportsInspection, packageName: string, clank: boolean) => {
+export const pushExports = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, packageName: string, clank: boolean) => {
   if (clank) {
-    pushClankExports(paragraphs, exportsInspection)
+    pushClankExports(markdown, packageSection, exportsInspection)
     return
   }
   const entries = Object.entries(exportsInspection)
+  const exportsSection = [packageSection, 'exports']
+  markdown.ensureSection(exportsSection)
   if (entries.length === 1 && entries[0][0] === '.') {
-    paragraphs.push('## exports', JSON.stringify(summarizeModuleExports(entries[0][1])))
+    markdown.extendSection(exportsSection, JSON.stringify(summarizeModuleExports(entries[0][1])))
     return
   }
-  paragraphs.push('## exports')
   for (const [exportPath, moduleInspection] of entries) {
-    paragraphs.push(`### ${getExportSpecifier(packageName, exportPath)}`)
-    paragraphs.push(JSON.stringify(summarizeModuleExports(moduleInspection)))
+    markdown.extendSection([...exportsSection, getExportSpecifier(packageName, exportPath)], JSON.stringify(summarizeModuleExports(moduleInspection)))
   }
 }

@@ -41,6 +41,7 @@
         "@js-temporal/polyfill": "^0.5.1",
         "flatten-string": "^0.2.0",
         "inspect-npm-package": "workspace:*",
+        "markdown-map": "0.3.0",
         "stringify-clank": "^0.1.1",
       },
     },
@@ -365,6 +366,8 @@
     "lodash-es": ["lodash-es@4.18.1", "", {}, "sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A=="],
 
     "lru-cache": ["lru-cache@11.5.2", "", {}, "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="],
+
+    "markdown-map": ["markdown-map@0.3.0", "", { "dependencies": { "flatten-string": "^0.2.0" } }, "sha512-xaD95xOxmTR/GkEqWT/y/zJ7lZ6NtpmTForpZejZsGOJTJyvv4u2Tj4i6PBifFWLpgjlK7gFkbm4RXjKnB9wHQ=="],
 
     "markdownify-inspection": ["markdownify-inspection@workspace:packages/markdownify-inspection"],
 

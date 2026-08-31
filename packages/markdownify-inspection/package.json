@@ -20,6 +20,7 @@
     "@js-temporal/polyfill": "^0.5.1",
     "flatten-string": "^0.2.0",
     "inspect-npm-package": "workspace:*",
+    "markdown-map": "0.3.0",
     "stringify-clank": "^0.1.1"
   }
 }

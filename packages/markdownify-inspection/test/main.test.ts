@@ -237,7 +237,7 @@ const expected = `# flatten-string 0.2.0
 
 ## first
 
-#### 0.0.1
+### 0.0.1
 
 16 May 2026, 3 months ago
 1601 bytes in 4 files
@@ -420,6 +420,10 @@ test('simplifies runtime export value descriptors in Markdown', () => {
             type: 'object',
             keys: ['map', 'forEach', 'count'],
           },
+          blockFences: {
+            type: 'array',
+            length: 12,
+          },
           version: {
             type: 'string',
             value: '19.2.8',
@@ -440,15 +444,16 @@ test('simplifies runtime export value descriptors in Markdown', () => {
     clank: true,
     now,
   })
-  expect(clank).toContain('### default or named\n\nChildren { entries [ map forEach count]} version { string 19.2.8}')
+  expect(clank).toContain('### default or named\n\nChildren { entries [ map forEach count]} blockFences { items 12} version { string 19.2.8}')
   expect(clank).toContain('#### named\n\ninternals { entries 42}')
   expect(clank).not.toContain('type object')
   expect(clank).not.toContain('type string')
+  expect(clank).not.toContain('type array')
   const markdown = markdownifyInspection({
     ...descriptorInspection,
     exports: {'.': descriptorInspection.exports?.['.'] ?? {}},
   }, {now})
-  expect(markdown).toContain('{"default+named":{"Children":{"entries":["map","forEach","count"]},"version":{"string":"19.2.8"}}}')
+  expect(markdown).toContain('{"default+named":{"Children":{"entries":["map","forEach","count"]},"blockFences":{"items":12},"version":{"string":"19.2.8"}}}')
 })
 test('includes npm metadata when the focused release is not visible', () => {
   const markdown = markdownifyInspection({
