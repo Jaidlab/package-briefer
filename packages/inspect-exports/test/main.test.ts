@@ -87,7 +87,7 @@ test('fails gracefully', async () => {
     },
   })).toBeUndefined()
 })
-test('describes constructable functions as classes', async () => {
+test('preserves function and class descriptions from the probe', async () => {
   const result = await inspectExports({
     name: 'demo',
     version: '1.0.0',

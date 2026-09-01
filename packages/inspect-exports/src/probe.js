@@ -19,6 +19,14 @@ if (peerSpecs.length) {
   }
 }
 
+const classPattern = /^\s*class(?:\s|\{)/u
+const describeFunction = value => {
+  if (value.constructor?.name === 'AsyncFunction') {
+    return 'async function'
+  }
+  return classPattern.test(Function.prototype.toString.call(value)) ? 'class' : 'function'
+}
+
 const describe = value => {
   if (typeof value === 'string') {
     return value.length < 100 ? {type: 'string', value} : {type: 'string', length: value.length}
@@ -31,15 +39,7 @@ const describe = value => {
     return {type: 'object', keys: keys.length > 20 ? keys.length : keys}
   }
   if (typeof value === 'function') {
-    if (value.constructor?.name === 'AsyncFunction') {
-      return 'async function'
-    }
-    try {
-      Reflect.construct(String, [], value)
-      return 'class'
-    } catch {
-      return 'function'
-    }
+    return describeFunction(value)
   }
   return typeof value
 }
