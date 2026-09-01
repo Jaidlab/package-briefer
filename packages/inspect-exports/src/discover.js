@@ -33,6 +33,7 @@ const getPatternCapture = (pattern, file) => {
   return new RegExp(source, 'u').exec(file)?.[1]
 }
 const paths = []
+const patterns = []
 const seenPaths = new Set
 const addPath = path => {
   if (!seenPaths.has(path)) {
@@ -79,8 +80,17 @@ for (const [exportPath, target] of exportEntries) {
     addPath(exportPath)
     continue
   }
-  for (const targetPattern of collectTargets(target)) {
+  const targets = collectTargets(target)
+  const unboundedTargets = [...new Set(targets.filter(target => target.startsWith('./') && !target.includes('*')))]
+  if (unboundedTargets.length) {
+    patterns.push({
+      enumerable: false,
+      path: exportPath,
+      targets: unboundedTargets,
+    })
+  }
+  for (const targetPattern of targets) {
     await expandPattern(exportPath, targetPattern)
   }
 }
-process.stdout.write(JSON.stringify(paths))
+process.stdout.write(JSON.stringify({paths, patterns}))

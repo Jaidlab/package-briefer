@@ -50,6 +50,12 @@ const pushClankExports = (markdown: MarkdownMap, packageSection: string, modules
     }
   }
 }
+const pushPatterns = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, clank: boolean) => {
+  if (!exportsInspection.patterns?.length) {
+    return
+  }
+  markdown.extendSection([packageSection, 'export patterns'], clank ? stringifyClank(exportsInspection.patterns) : JSON.stringify(exportsInspection.patterns))
+}
 const pushFailures = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, packageName: string, clank: boolean) => {
   if (exportsInspection.error) {
     markdown.extendSection([packageSection, 'export inspection error'], clank ? stringifyClank(exportsInspection.error) : JSON.stringify(exportsInspection.error))
@@ -74,5 +80,6 @@ export const pushExports = (markdown: MarkdownMap, packageSection: string, expor
       }
     }
   }
+  pushPatterns(markdown, packageSection, exportsInspection, clank)
   pushFailures(markdown, packageSection, exportsInspection, packageName, clank)
 }

@@ -58,6 +58,7 @@ test('merges JSONL result packets', async () => {
       JSON.stringify({
         modules: {'./feature': {named: {feature: 'function'}}},
         failures: {'./broken': {name: 'Error', message: 'broken'}},
+        patterns: [{enumerable: false, path: './*', targets: ['./index.js']}],
       }),
     ].join('\n'),
   })
@@ -67,6 +68,7 @@ test('merges JSONL result packets', async () => {
       './feature': {named: {feature: 'function'}},
     },
     failures: {'./broken': {name: 'Error', message: 'broken'}},
+    patterns: [{enumerable: false, path: './*', targets: ['./index.js']}],
   })
 })
 test('passes an explicit Docker daemon to the container runner', async () => {

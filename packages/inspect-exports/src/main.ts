@@ -36,10 +36,17 @@ export type InspectionFailure = {
   name?: string
 }
 
+export type ExportPattern = {
+  enumerable: false
+  path: string
+  targets: Array<string>
+}
+
 export type Inspection = {
   error?: InspectionFailure
   failures?: Record<string, InspectionFailure>
   modules: Record<string, ModuleInspection>
+  patterns?: Array<ExportPattern>
 }
 
 export type FetchImplementation = (input: Request | URL | string, init?: RequestInit) => Promise<Response>
@@ -116,12 +123,16 @@ const parseContainerExitCode = (output: string) => {
   }
   return exitCode
 }
-const parseDiscoveredPaths = (output: string) => {
-  const paths = JSON.parse(output) as unknown
-  if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === 'string')) {
-    throw new Error('Export discovery returned invalid paths')
+const isExportPattern = (value: unknown): value is ExportPattern => Boolean(value && typeof value === 'object' && !Array.isArray(value) && 'enumerable' in value && value.enumerable === false && 'path' in value && typeof value.path === 'string' && 'targets' in value && Array.isArray(value.targets) && value.targets.every(target => typeof target === 'string'))
+const parseDiscovery = (output: string) => {
+  const discovery = JSON.parse(output) as unknown
+  if (!discovery || typeof discovery !== 'object' || Array.isArray(discovery) || !('paths' in discovery) || !Array.isArray(discovery.paths) || !discovery.paths.every((path): path is string => typeof path === 'string') || !('patterns' in discovery) || !Array.isArray(discovery.patterns) || !discovery.patterns.every(isExportPattern)) {
+    throw new Error('Export discovery returned invalid data')
   }
-  return paths
+  return {
+    paths: discovery.paths,
+    patterns: discovery.patterns,
+  }
 }
 const getReportedPaths = (output: string) => new Set(output
   .split(/\r?\n/u)
@@ -149,15 +160,16 @@ export const runContainer: ContainerRunner = async options => {
   }
   const waitForContainer = async (name: string) => parseContainerExitCode(await executeDocker(['wait', name], options.timeoutMs, options.dockerHost))
   const readResults = () => executeDocker(['exec', resultContainerName, 'bun', '--eval', readResultsScript], options.timeoutMs, options.dockerHost)
-  const submitFailure = async (exportPath: string, error: unknown) => {
-    const packet = JSON.stringify({
-      exportPath,
-      modules: {},
-      failures: {[exportPath]: getInspectionFailure(error)},
-    })
-    const script = `const response = await fetch('${resultServerUrl}', {method: 'POST', headers: {'content-type': 'application/json'}, body: ${JSON.stringify(packet)}}); if (!response.ok) process.exit(1)`
+  const submitPacket = async (packet: object) => {
+    const body = JSON.stringify(packet)
+    const script = `const response = await fetch('${resultServerUrl}', {method: 'POST', headers: {'content-type': 'application/json'}, body: ${JSON.stringify(body)}}); if (!response.ok) process.exit(1)`
     await executeDocker(['exec', resultContainerName, 'bun', '--eval', script], options.timeoutMs, options.dockerHost)
   }
+  const submitFailure = (exportPath: string, error: unknown) => submitPacket({
+    exportPath,
+    modules: {},
+    failures: {[exportPath]: getInspectionFailure(error)},
+  })
   try {
     await executeDocker([
       'build',
@@ -186,7 +198,7 @@ export const runContainer: ContainerRunner = async options => {
     if (discoveryExitCode !== 0) {
       throw new Error(`Export discovery exited with code ${discoveryExitCode}`)
     }
-    const paths = parseDiscoveredPaths(await executeDocker(['logs', discoveryContainerName], options.timeoutMs, options.dockerHost))
+    const {paths, patterns} = parseDiscovery(await executeDocker(['logs', discoveryContainerName], options.timeoutMs, options.dockerHost))
     await removeContainer(discoveryContainerName)
 
     await executeDocker(['network', 'create', networkName], options.timeoutMs, options.dockerHost)
@@ -209,6 +221,9 @@ export const runContainer: ContainerRunner = async options => {
     ], options.timeoutMs, options.dockerHost)
     await executeDocker(['start', resultContainerName], options.timeoutMs, options.dockerHost)
     await executeDocker(['exec', resultContainerName, 'bun', '--eval', waitForResultServerScript], options.timeoutMs, options.dockerHost)
+    if (patterns.length) {
+      await submitPacket({modules: {}, patterns})
+    }
 
     for (const [index, exportPath] of paths.entries()) {
       const explorationContainerName = `inspect-exports-probe-${id}-${index}`
@@ -300,6 +315,13 @@ const inspectExports = async (options: Options): Promise<Inspection> => {
       Object.assign(inspection.modules, packet.modules)
       if ('failures' in packet && packet.failures && typeof packet.failures === 'object' && !Array.isArray(packet.failures)) {
         Object.assign(inspection.failures ??= {}, packet.failures)
+      }
+      if ('patterns' in packet) {
+        if (!Array.isArray(packet.patterns) || !packet.patterns.every(isExportPattern)) {
+          throw new Error('Export exploration returned invalid pattern metadata')
+        }
+        inspection.patterns ??= []
+        inspection.patterns.push(...packet.patterns)
       }
     }
     return inspection

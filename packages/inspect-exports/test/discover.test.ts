@@ -36,7 +36,7 @@ const runDiscovery = async (packageJson: Record<string, unknown>, files: Record<
       new Response(child.stderr).text(),
     ])
     expect(exitCode, stderr).toBe(0)
-    return JSON.parse(stdout) as Array<string>
+    return JSON.parse(stdout) as {paths: Array<string>; patterns: Array<{enumerable: false; path: string; targets: Array<string>}>}
   } finally {
     await rm(root, {
       force: true,
@@ -64,15 +64,31 @@ test('discovers explicit, conditional and enumerable wildcard export paths', asy
     'feature-bun.js': '',
     'features/a.js': '',
     'features/b.js': '',
-  })).toEqual([
-    '.',
-    './package.json',
-    './metadata',
-    './feature',
-    './features/a',
-    './features/b',
-  ])
+  })).toEqual({
+    paths: [
+      '.',
+      './package.json',
+      './metadata',
+      './feature',
+      './features/a',
+      './features/b',
+    ],
+    patterns: [],
+  })
 })
 test('discovers only the root when exports is absent', async () => {
-  expect(await runDiscovery({}, {'index.js': ''})).toEqual(['.'])
+  expect(await runDiscovery({}, {'index.js': ''})).toEqual({paths: ['.'], patterns: []})
+})
+
+test('reports wildcard exports with constant targets as non-enumerable', async () => {
+  expect(await runDiscovery({
+    exports: {'./*': './index.js'},
+  }, {'index.js': ''})).toEqual({
+    paths: [],
+    patterns: [{
+      enumerable: false,
+      path: './*',
+      targets: ['./index.js'],
+    }],
+  })
 })

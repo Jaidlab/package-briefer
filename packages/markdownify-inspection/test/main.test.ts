@@ -418,6 +418,20 @@ test('simplifies runtime export value descriptors in Markdown', () => {
   }, {now})
   expect(markdown).toContain('{"named":{"Children":{"entries":["map","forEach","count"]},"blockFences":{"items":12},"version":{"string":"19.2.8"}}}')
 })
+test('renders non-enumerable export patterns', () => {
+  const markdown = markdownifyInspection({
+    ...inspection,
+    exports: {
+      modules: {},
+      patterns: [{
+        enumerable: false,
+        path: './*',
+        targets: ['./index.js'],
+      }],
+    },
+  }, {now})
+  expect(markdown).toContain('## export patterns\n\n[{"enumerable":false,"path":"./*","targets":["./index.js"]}]')
+})
 test('renders export inspection failures', () => {
   const markdown = markdownifyInspection({
     ...inspection,
