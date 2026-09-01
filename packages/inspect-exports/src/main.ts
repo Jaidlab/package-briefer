@@ -28,7 +28,6 @@ export type ExportValue
 
 export type ModuleInspection = {
   default?: ExportValue
-  default_or_named?: Record<string, ExportValue>
   named?: Record<string, ExportValue>
 }
 

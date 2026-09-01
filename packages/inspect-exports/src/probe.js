@@ -54,9 +54,8 @@ const inspectModule = async specifier => {
   }
   const module = await import(resolved)
   const {default: defaultExport, ...named} = module
-  const commonJs = defaultExport && typeof defaultExport === 'object' && Object.entries(named).every(([key, value]) => defaultExport[key] === value)
   const namedInspection = Object.fromEntries(Object.entries(named).map(([key, value]) => [key, describe(value)]))
-  return commonJs ? {default_or_named: namedInspection} : {
+  return {
     ...(defaultExport !== undefined ? {default: describe(defaultExport)} : {}),
     ...(Object.keys(named).length ? {named: namedInspection} : {}),
   }

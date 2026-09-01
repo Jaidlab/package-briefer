@@ -26,22 +26,13 @@ const summarizeExportValue = (value: unknown): Clankable => {
   }
   return Object.fromEntries(Object.entries(record).map(([key, nestedValue]) => [key, summarizeExportValue(nestedValue)]))
 }
-const summarizeModuleExports = (moduleInspection: ModuleInspection) => {
-  const {default_or_named: defaultOrNamed, ...rest} = moduleInspection
-  return summarizeExportValue({
-    ...rest,
-    ...defaultOrNamed === undefined ? {} : {'default+named': defaultOrNamed},
-  }) as Record<string, Clankable>
-}
+const summarizeModuleExports = (moduleInspection: ModuleInspection) => summarizeExportValue(moduleInspection) as Record<string, Clankable>
 const getExportSpecifier = (packageName: string, exportPath: string) => {
   return exportPath === '.' ? packageName : `${packageName}${exportPath.slice(1)}`
 }
-const getExportKindTitle = (kind: string) => {
-  return kind === 'default_or_named' ? 'default or named' : kind
-}
 const pushClankModuleExports = (markdown: MarkdownMap, parentSection: Array<string>, moduleInspection: ModuleInspection) => {
   for (const [kind, value] of Object.entries(moduleInspection)) {
-    markdown.extendSection([...parentSection, getExportKindTitle(kind)], stringifyClank(summarizeExportValue(value)))
+    markdown.extendSection([...parentSection, kind], stringifyClank(summarizeExportValue(value)))
   }
 }
 const pushClankExports = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection) => {

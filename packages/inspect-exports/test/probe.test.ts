@@ -101,6 +101,41 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
     },
   })
 })
+test('preserves default exports without inferring CommonJS', async () => {
+  const result = await runProbe({
+    exports: {
+      '.': './default-object.js',
+      './alias': './alias.js',
+      './commonjs': './commonjs.cjs',
+    },
+  }, {
+    'default-object.js': 'export default {foo: 1}',
+    'alias.js': 'const foo = {}\nexport {foo}\nexport default {foo}',
+    'commonjs.cjs': 'module.exports = function demo() {}\nmodule.exports.bar = () => {}',
+  })
+  expect(result['.']).toEqual({
+    default: {
+      type: 'object',
+      keys: ['foo'],
+    },
+  })
+  expect(result['./alias']).toEqual({
+    default: {
+      type: 'object',
+      keys: ['foo'],
+    },
+    named: {
+      foo: {
+        type: 'object',
+        keys: [],
+      },
+    },
+  })
+  expect(result['./commonjs']).toMatchObject({
+    default: 'function',
+    named: {bar: 'function'},
+  })
+})
 test('inspects only the package root when exports is absent', async () => {
   expect(await runProbe({}, {
     'index.js': 'export const root = true',
