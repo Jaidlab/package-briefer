@@ -92,7 +92,7 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   if (!latestVersion) {
     throw new Error(`npm package ${packument.name} has no latest release`)
   }
-  const focusedVersion = options.version ?? latestVersion
+  const focusedVersion = options.version === undefined ? latestVersion : packument['dist-tags']?.[options.version] ?? options.version
   const versionEntries = Object.entries(versions)
     .map(([version, metadata]) => ({
       version,

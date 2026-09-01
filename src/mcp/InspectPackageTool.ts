@@ -5,7 +5,7 @@ import z from 'zod'
 const inspectPackageFetchTimeoutMs = 300_000
 const inputSchema = z.strictObject({
   name: z.string().trim().min(1).describe('The npm package name to inspect.'),
-  version: z.string().trim().min(1).optional().describe('The package version to inspect. Omit for the latest version.'),
+  version: z.string().trim().min(1).optional().describe('The package version or release tag to inspect. Omit for the latest version.'),
 })
 type Input = z.output<typeof inputSchema>
 
