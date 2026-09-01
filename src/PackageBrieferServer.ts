@@ -18,6 +18,10 @@ type Inspect = (options: InspectionOptions & InspectionProgress & {
 }) => Promise<Inspection>
 type Markdownify = (inspection: Inspection, options?: MarkdownifyOptions) => string
 
+type RequestTimeoutController = {
+  timeout: (request: Request, seconds: number) => void
+}
+
 type Route = {
   llms: boolean
   packageName: string
@@ -112,7 +116,7 @@ const errorResponse = (message: string, status: number, llms: boolean) => {
 }
 
 export class PackageBrieferServer {
-  fetch = async (request: Request) => {
+  fetch = async (request: Request, server?: RequestTimeoutController) => {
     const url = new URL(request.url)
     if (url.pathname === '/') {
       if (request.method !== 'GET') {
@@ -139,6 +143,7 @@ export class PackageBrieferServer {
       })
     }
     if (route.llms) {
+      server?.timeout(request, 0)
       return this.getMarkdownResponse(route.packageName, route.version, getClank(url, this.defaultClank))
     }
     try {

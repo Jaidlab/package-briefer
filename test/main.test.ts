@@ -55,6 +55,15 @@ const inspect = async (options: InspectOptions) => {
   onFocusedVersion?.(inspection.focused.version)
   return inspection
 }
+const slowStreamingInspect = async (options: InspectOptions) => {
+  options.onFocusedVersion?.('1.0.0')
+  options.onFocusedPackage?.({
+    version: '1.0.0',
+    package: inspection.focused.package,
+  })
+  await Bun.sleep(1200)
+  return inspection
+}
 const markdownify = () => '# demo 1.0.0\n'
 const renderClank = (_inspection: Inspection, options?: {clank?: boolean}) => `# demo 1.0.0\n\n${String(options?.clank)}`
 test('serves the HTML homepage', async () => {
@@ -85,6 +94,34 @@ test('serves llms.txt', async () => {
   expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8')
   expect(await response.text()).toBe('# demo 1.0.0\n')
   expect(inspectCalls.at(-1)).toEqual({name: 'demo'})
+})
+test('disables Bun idle timeouts only for llms.txt streams', async () => {
+  const server = new PackageBrieferServer(inspect, markdownify, 0)
+  const timeouts: Array<number> = []
+  const timeoutController = {
+    timeout: (_request: Request, seconds: number) => {
+      timeouts.push(seconds)
+    },
+  }
+  await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt'), timeoutController)
+  expect(timeouts).toEqual([0])
+  await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo'), timeoutController)
+  expect(timeouts).toEqual([0])
+})
+test('keeps quiet llms.txt streams alive beyond Bun idleTimeout', async () => {
+  const packageServer = new PackageBrieferServer(slowStreamingInspect, markdownify, 0, {}, 100, true)
+  const bunServer = Bun.serve({
+    port: 0,
+    idleTimeout: 1,
+    fetch: packageServer.fetch,
+  })
+  try {
+    const response = await fetch(`http://127.0.0.1:${bunServer.port}/npmjs.com/package/demo/llms.txt`)
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('# demo 1.0.0')
+  } finally {
+    await bunServer.stop(true)
+  }
 })
 test('streams llms.txt in three chunks', async () => {
   let focus: (() => void) | undefined
