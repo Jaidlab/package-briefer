@@ -51,6 +51,5 @@ export const run: CommandHandler<typeof mainCommand> = async context => {
     port: flags.httpPort,
   })
   console.log(`package-briefer listening on http://${server.hostname}:${server.port}`)
-  console.log(`Example: http://${server.hostname}:${server.port}/npmjs.com/package/react/llms.txt`)
   await new Promise<void>(() => {})
 }
