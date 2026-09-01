@@ -296,7 +296,7 @@ ${hiddenInputs}
 </html>`, {
     headers: {
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${new URL(parsed.redirectUri).origin}; base-uri 'none'; frame-ancestors 'none'`,
       'Content-Type': 'text/html; charset=utf-8',
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
