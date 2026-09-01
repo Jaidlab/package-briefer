@@ -1,4 +1,5 @@
 import type {Inspection, Options as InspectNpmPackageOptions, SamplingOptions} from 'inspect-npm-package'
+import type {Options as MarkdownifyOptions} from 'markdownify-inspection'
 
 import {expect, test} from 'bun:test'
 
@@ -38,12 +39,12 @@ const inspection: Inspection = {
     },
   },
 }
-type InspectOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches' | 'onFocusedVersion'> & {name: string
+type InspectOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches' | 'onExportModule' | 'onFocusedPackage' | 'onFocusedVersion'> & {name: string
   version?: string}
 type LoggedInspectOptions = Omit<InspectOptions, 'onFocusedVersion'>
 const inspectCalls: Array<LoggedInspectOptions> = []
 const inspect = async (options: InspectOptions) => {
-  const {onFocusedVersion, ...loggedOptions} = options
+  const {onExportModule: _onExportModule, onFocusedPackage: _onFocusedPackage, onFocusedVersion, ...loggedOptions} = options
   inspectCalls.push(loggedOptions)
   if (options.name === 'missing') {
     throw new PackageNotFoundError(options.name)
@@ -115,6 +116,72 @@ test('streams llms.txt in three chunks', async () => {
   expect(await bodyChunk).toBe('\n\nbody\n')
   const end = await reader.read()
   expect(end.done).toBe(true)
+})
+test('streams Clank package and export sections as they become ready', async () => {
+  let focus: (() => void) | undefined
+  let packageReady: (() => void) | undefined
+  let rootReady: (() => void) | undefined
+  let featureReady: (() => void) | undefined
+  let otherReady: (() => void) | undefined
+  let finish: (() => void) | undefined
+  let finalOptions: MarkdownifyOptions | undefined
+  const completeInspection: Inspection = {
+    ...inspection,
+    exports: {
+      modules: {
+        '.': {named: {foo: 'function'}},
+        './feature': {named: {bar: 'function'}},
+        './other': {default: 'function'},
+      },
+    },
+  }
+  const controlledInspect = (options: InspectOptions) => new Promise<Inspection>(resolve => {
+    focus = () => options.onFocusedVersion?.('1.0.0')
+    packageReady = () => options.onFocusedPackage?.({version: '1.0.0', package: {name: 'demo'}})
+    rootReady = () => options.onExportModule?.('.', {named: {foo: 'function'}})
+    featureReady = () => options.onExportModule?.('./feature', {named: {bar: 'function'}})
+    otherReady = () => options.onExportModule?.('./other', {default: 'function'})
+    finish = () => resolve(completeInspection)
+  })
+  const server = new PackageBrieferServer(controlledInspect, (_inspection, options) => {
+    finalOptions = options
+    return '# demo 1.0.0\n\nremainder'
+  }, 0)
+  const response = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=true'))
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Response has no body')
+  }
+  const decoder = new TextDecoder
+  const readChunk = async () => {
+    const chunk = await reader.read()
+    if (!(chunk.value instanceof Uint8Array)) {
+      throw new TypeError('Expected response chunk')
+    }
+    return decoder.decode(chunk.value)
+  }
+  expect(await readChunk()).toBe('# demo')
+  const focusedChunk = readChunk()
+  focus?.()
+  expect(await focusedChunk).toBe(' 1.0.0')
+  const packageChunk = readChunk()
+  packageReady?.()
+  expect(await packageChunk).toBe('\n\npackage { name demo}')
+  const rootChunk = readChunk()
+  rootReady?.()
+  expect(await rootChunk).toBe('\n\n## exports\n\n### named\n\nfoo function')
+  const featureChunk = readChunk()
+  featureReady?.()
+  expect(await featureChunk).toBe('\n\n## subpackage exports\n\n### feature\n\n#### named\n\nbar function')
+  const otherChunk = readChunk()
+  otherReady?.()
+  expect(await otherChunk).toBe('\n\n### other\n\n#### default\n\nfunction')
+  const remainderChunk = readChunk()
+  finish?.()
+  expect(await remainderChunk).toBe('\n\nremainder')
+  expect(finalOptions?.omitPackage).toBe(true)
+  expect([...finalOptions?.omitExportPaths ?? []]).toEqual(['.', './feature', './other'])
+  expect((await reader.read()).done).toBe(true)
 })
 test('overrides Clank rendering per request', async () => {
   inspectCalls.length = 0

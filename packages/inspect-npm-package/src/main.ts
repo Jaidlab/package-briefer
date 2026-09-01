@@ -1,7 +1,7 @@
 import type {ExternalCaches} from './lib/ExternalCacheStorage.ts'
 import type {FetchImplementation, NpmPackument, PackumentVersion} from './lib/NpmRegistryClient.ts'
 import type {BriefPackage, BriefRelease, FocusedRelease, Inspection, TaggedRelease} from './lib/types.ts'
-import type {Inspection as ExportsInspection, Options as InspectExportsOptions} from 'inspect-exports'
+import type {Inspection as ExportsInspection, Options as InspectExportsOptions, ModuleInspection} from 'inspect-exports'
 
 import {Temporal} from '@js-temporal/polyfill'
 import inspectExports, {getInspectionFailure} from 'inspect-exports'
@@ -11,7 +11,7 @@ import {defaultGitHubInspectionOptions, getGitHubSlug, getRepositoryUrl, GitHubC
 import {NpmRegistryClient, PackageVersionNotFoundError} from './lib/NpmRegistryClient.ts'
 import {NpmxClient} from './lib/NpmxClient.ts'
 
-export type ExportsInspectorOptions = Pick<InspectExportsOptions, 'dockerHost' | 'name' | 'version'>
+export type ExportsInspectorOptions = Pick<InspectExportsOptions, 'dockerHost' | 'name' | 'onModule' | 'version'>
 export type ExportsInspector = (options: ExportsInspectorOptions) => Promise<ExportsInspection>
 
 export type SamplingOptions = {
@@ -39,6 +39,8 @@ export type Options = SamplingOptions & {
   githubToken?: string
   name: string
   now?: Temporal.Instant
+  onExportModule?: (exportPath: string, moduleInspection: ModuleInspection) => void
+  onFocusedPackage?: (focused: Pick<FocusedRelease, 'package' | 'version'>) => void
   onFocusedVersion?: (version: string) => void
   version?: string
 }
@@ -106,12 +108,18 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   if (!focusedEntry) {
     throw new PackageVersionNotFoundError(packument.name, focusedVersion)
   }
+  const focusedPackage = getBriefPackage(focusedEntry.metadata)
   options.onFocusedVersion?.(focusedVersion)
+  options.onFocusedPackage?.({
+    version: focusedVersion,
+    package: focusedPackage,
+  })
   const exportsPromise = (async () => {
     try {
       return await (options.exportsInspector ?? inspectExports)({
         ...options.exportsDockerHost === undefined ? {} : {dockerHost: options.exportsDockerHost},
         name: packument.name,
+        ...options.onExportModule === undefined ? {} : {onModule: options.onExportModule},
         version: focusedVersion,
       })
     } catch (error) {
@@ -207,7 +215,7 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   ])
   const focused: FocusedRelease = {
     ...focusedRelease,
-    package: getBriefPackage(focusedEntry.metadata),
+    package: focusedPackage,
   }
   return {
     exports: exportsInspection,

@@ -1,6 +1,6 @@
 import type {Inspection} from 'inspect-npm-package'
-import type MarkdownMap from 'markdown-map'
 
+import MarkdownMap from 'markdown-map'
 import stringifyClank from 'stringify-clank'
 
 type Clankable = Parameters<typeof stringifyClank>[0]
@@ -50,6 +50,27 @@ const pushClankExports = (markdown: MarkdownMap, packageSection: string, modules
     }
   }
 }
+export const renderClankExportModule = (exportPath: string, moduleInspection: ModuleInspection, includeSubpackageHeading = true) => {
+  const markdown = new MarkdownMap
+  if (exportPath === '.') {
+    const exportsSection = ['exports']
+    markdown.ensureSection(exportsSection)
+    pushClankModuleExports(markdown, exportsSection, moduleInspection)
+    return markdown.render({startDepth: 2, omitEmpty: false})
+  }
+  const exportName = exportPath.replace(/^\.\//u, '')
+  if (includeSubpackageHeading) {
+    const exportSection = ['subpackage exports', exportName]
+    markdown.ensureSection(exportSection)
+    pushClankModuleExports(markdown, exportSection, moduleInspection)
+    return markdown.render({startDepth: 2, omitEmpty: false})
+  }
+  const exportSection = [exportName]
+  markdown.ensureSection(exportSection)
+  pushClankModuleExports(markdown, exportSection, moduleInspection)
+  return markdown.render({startDepth: 3, omitEmpty: false})
+}
+
 const pushPatterns = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, clank: boolean) => {
   if (!exportsInspection.patterns?.length) {
     return
@@ -65,10 +86,11 @@ const pushFailures = (markdown: MarkdownMap, packageSection: string, exportsInsp
   }
 }
 
-export const pushExports = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, packageName: string, clank: boolean) => {
-  const entries = Object.entries(exportsInspection.modules)
+export const pushExports = (markdown: MarkdownMap, packageSection: string, exportsInspection: ExportsInspection, packageName: string, clank: boolean, omitPaths: ReadonlySet<string> = new Set) => {
+  const modules = Object.fromEntries(Object.entries(exportsInspection.modules).filter(([exportPath]) => !omitPaths.has(exportPath)))
+  const entries = Object.entries(modules)
   if (clank) {
-    pushClankExports(markdown, packageSection, exportsInspection.modules)
+    pushClankExports(markdown, packageSection, modules)
   } else if (entries.length) {
     const exportsSection = [packageSection, 'exports']
     markdown.ensureSection(exportsSection)

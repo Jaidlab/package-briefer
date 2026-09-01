@@ -13,8 +13,12 @@ import {formatDependencies, formatReleaseStats, getVisibleReleaseVersions, pushR
 export type Options = {
   clank?: boolean
   now?: Temporal.Instant
+  omitExportPaths?: ReadonlySet<string>
+  omitPackage?: boolean
   recentSeconds?: number
 }
+
+export const renderPackageClank = (packageMetadata: Inspection['focused']['package']) => stringifyClank({package: packageMetadata})
 
 const markdownifyInspection = (inspection: Inspection, options: Options = {}) => {
   const now = options.now ?? Temporal.Now.instant()
@@ -24,16 +28,24 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
   const focusedMetadataIsVisible = getVisibleReleaseVersions(inspection).has(focusedRelease.version)
   const markdown = new MarkdownMap
   const packageSection = `${packageName} ${focusedRelease.version}`
-  if (!focusedMetadataIsVisible) {
-    markdown.extendSection([packageSection, 'npm'], flattenString.lines(formatDate(focusedRelease.date, now, recentSeconds), formatReleaseStats(focusedRelease), formatDependencies(focusedRelease)))
+  const pushFocusedNpm = () => {
+    if (!focusedMetadataIsVisible) {
+      markdown.extendSection([packageSection, 'npm'], flattenString.lines(formatDate(focusedRelease.date, now, recentSeconds), formatReleaseStats(focusedRelease), formatDependencies(focusedRelease)))
+    }
   }
   if (options.clank) {
-    markdown.extendSection(packageSection, stringifyClank({package: focusedRelease.package}))
+    if (!options.omitPackage) {
+      markdown.extendSection(packageSection, renderPackageClank(focusedRelease.package))
+    }
   } else {
+    pushFocusedNpm()
     markdown.extendSection([packageSection, 'package'], JSON.stringify(focusedRelease.package))
   }
   if (inspection.exports) {
-    pushExports(markdown, packageSection, inspection.exports, packageName, options.clank === true)
+    pushExports(markdown, packageSection, inspection.exports, packageName, options.clank === true, options.omitExportPaths)
+  }
+  if (options.clank) {
+    pushFocusedNpm()
   }
   const releasesSection = `${inspection.releases.total} npm releases`
   const tagsSection = [releasesSection, 'tags']
@@ -58,4 +70,5 @@ const markdownifyInspection = (inspection: Inspection, options: Options = {}) =>
   return `${markdown.render({omitEmpty: false})}\n`
 }
 
+export {renderClankExportModule} from './lib/exports.ts'
 export default markdownifyInspection

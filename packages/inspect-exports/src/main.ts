@@ -1,6 +1,6 @@
 import {getPackageNameParts} from './packageLocation.ts'
 
-export type ExportKey = string | {symbol: string | null}
+export type ExportKey = {symbol: string | null} | string
 
 export type ExportValue
   = | {
@@ -59,10 +59,18 @@ export type Inspection = {
 
 export type FetchImplementation = (input: Request | URL | string, init?: RequestInit) => Promise<Response>
 
+export type InspectionPacket = {
+  exportPath?: string
+  failures?: Record<string, InspectionFailure>
+  modules: Record<string, ModuleInspection>
+  patterns?: Array<ExportPattern>
+}
+
 export type ContainerRunnerOptions = {
   dockerHost?: string
   image: string
   name: string
+  onPacket?: (packet: InspectionPacket) => void
   timeoutMs: number
   version: string
 }
@@ -75,6 +83,7 @@ export type Options = {
   fetch?: FetchImplementation
   image?: string
   name: string
+  onModule?: (exportPath: string, moduleInspection: ModuleInspection) => void
   timeoutMs?: number
   version?: string
 }
@@ -138,15 +147,26 @@ const parseDiscovery = (output: string) => {
     throw new Error('Export discovery returned invalid data')
   }
   return {
-    paths: discovery.paths,
+    paths: discovery.paths.includes('.') ? ['.', ...discovery.paths.filter(path => path !== '.')] : discovery.paths,
     patterns: discovery.patterns,
   }
 }
-const getReportedPaths = (output: string) => new Set(output
+const parseInspectionPacket = (line: string): InspectionPacket => {
+  const packet = JSON.parse(line) as unknown
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet) || !('modules' in packet) || !packet.modules || typeof packet.modules !== 'object' || Array.isArray(packet.modules)) {
+    throw new TypeError('Export exploration returned an invalid result packet')
+  }
+  if ('patterns' in packet && (!Array.isArray(packet.patterns) || !packet.patterns.every(isExportPattern))) {
+    throw new TypeError('Export exploration returned invalid pattern metadata')
+  }
+  return packet as InspectionPacket
+}
+const parseResultPackets = (output: string) => output
   .split(/\r?\n/u)
   .map(line => line.trim())
   .filter(Boolean)
-  .map(line => JSON.parse(line) as {exportPath?: unknown})
+  .map(parseInspectionPacket)
+const getReportedPaths = (packets: Array<InspectionPacket>) => new Set(packets
   .map(packet => packet.exportPath)
   .filter((exportPath): exportPath is string => typeof exportPath === 'string'))
 
@@ -168,6 +188,15 @@ export const runContainer: ContainerRunner = async options => {
   }
   const waitForContainer = async (name: string) => parseContainerExitCode(await executeDocker(['wait', name], options.timeoutMs, options.dockerHost))
   const readResults = () => executeDocker(['exec', resultContainerName, 'bun', '--eval', readResultsScript], options.timeoutMs, options.dockerHost)
+  let emittedPacketCount = 0
+  const emitNewPackets = (output: string) => {
+    const packets = parseResultPackets(output)
+    for (const packet of packets.slice(emittedPacketCount)) {
+      options.onPacket?.(packet)
+    }
+    emittedPacketCount = packets.length
+    return packets
+  }
   const submitPacket = async (packet: object) => {
     const body = JSON.stringify(packet)
     const script = `const response = await fetch('${resultServerUrl}', {method: 'POST', headers: {'content-type': 'application/json'}, body: ${JSON.stringify(body)}}); if (!response.ok) process.exit(1)`
@@ -233,6 +262,11 @@ export const runContainer: ContainerRunner = async options => {
       await submitPacket({modules: {}, patterns})
     }
 
+    let output = patterns.length ? await readResults() : ''
+    if (output) {
+      emitNewPackets(output)
+    }
+
     for (const [index, exportPath] of paths.entries()) {
       const explorationContainerName = `inspect-exports-probe-${id}-${index}`
       try {
@@ -258,16 +292,22 @@ export const runContainer: ContainerRunner = async options => {
       } finally {
         await removeContainer(explorationContainerName)
       }
+      output = await readResults()
+      emitNewPackets(output)
     }
 
-    let output = await readResults()
-    const reportedPaths = getReportedPaths(output)
+    if (!output) {
+      output = await readResults()
+    }
+    let packets = emitNewPackets(output)
+    const reportedPaths = getReportedPaths(packets)
     const missingPaths = paths.filter(path => !reportedPaths.has(path))
     for (const exportPath of missingPaths) {
       await submitFailure(exportPath, new Error('Export exploration exited without submitting a result'))
     }
     if (missingPaths.length) {
       output = await readResults()
+      packets = emitNewPackets(output)
     }
     return output
   } finally {
@@ -305,30 +345,36 @@ const inspectExports = async (options: Options): Promise<Inspection> => {
     getPackageNameParts(options.name)
     const fetchImplementation = options.fetch ?? fetch
     const version = options.version ?? await resolveVersion(options.name, fetchImplementation)
+    const emittedModules = new Set<string>
+    const emitModules = (packet: InspectionPacket) => {
+      for (const [exportPath, moduleInspection] of Object.entries(packet.modules)) {
+        if (emittedModules.has(exportPath)) {
+          continue
+        }
+        emittedModules.add(exportPath)
+        options.onModule?.(exportPath, moduleInspection)
+      }
+    }
     const output = await (options.containerRunner ?? runContainer)({
       ...options.dockerHost === undefined ? {} : {dockerHost: options.dockerHost},
       image: options.image ?? defaultImage,
       name: options.name,
+      ...options.onModule === undefined ? {} : {onPacket: emitModules},
       timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
       version,
     })
-    const packets = output.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => JSON.parse(line) as unknown)
+    const packets = parseResultPackets(output)
     if (!packets.length) {
       throw new Error('Export exploration produced no result packets')
     }
     const inspection: Inspection = {modules: {}}
     for (const packet of packets) {
-      if (!packet || typeof packet !== 'object' || Array.isArray(packet) || !('modules' in packet) || !packet.modules || typeof packet.modules !== 'object' || Array.isArray(packet.modules)) {
-        throw new Error('Export exploration returned an invalid result packet')
-      }
+      emitModules(packet)
       Object.assign(inspection.modules, packet.modules)
-      if ('failures' in packet && packet.failures && typeof packet.failures === 'object' && !Array.isArray(packet.failures)) {
+      if (packet.failures) {
         Object.assign(inspection.failures ??= {}, packet.failures)
       }
-      if ('patterns' in packet) {
-        if (!Array.isArray(packet.patterns) || !packet.patterns.every(isExportPattern)) {
-          throw new Error('Export exploration returned invalid pattern metadata')
-        }
+      if (packet.patterns) {
         inspection.patterns ??= []
         inspection.patterns.push(...packet.patterns)
       }

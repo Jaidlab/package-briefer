@@ -605,6 +605,32 @@ test('configures sample sizes', async () => {
   const github = inspection.repository && 'github' in inspection.repository ? inspection.repository.github : undefined
   expect(github?.contributorSample.map(contributor => contributor.name)).toEqual(['jaid'])
 })
+test('reports package and export progress before inspection completion', async () => {
+  const events: Array<string> = []
+  let exportOptionsHadCallback = false
+  const pending = inspectNpmPackage({
+    name: 'demo',
+    fetch: fetchMock,
+    now,
+    onFocusedVersion: version => events.push(`version:${version}`),
+    onFocusedPackage: focused => events.push(`package:${focused.version}:${focused.package.name}`),
+    onExportModule: exportPath => events.push(`export:${exportPath}`),
+    exportsInspector: async options => {
+      exportOptionsHadCallback = typeof options.onModule === 'function'
+      options.onModule?.('.', {default: 'function'})
+      events.push('exports finished')
+      return {modules: {'.': {default: 'function'}}}
+    },
+  })
+  await pending
+  expect(exportOptionsHadCallback).toBe(true)
+  expect(events.slice(0, 4)).toEqual([
+    'version:2.0.0',
+    'package:2.0.0:demo',
+    'export:.',
+    'exports finished',
+  ])
+})
 test('focuses an explicit version', async () => {
   let inspectedVersion = ''
   const inspection = await inspectNpmPackage({

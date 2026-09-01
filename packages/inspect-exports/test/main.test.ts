@@ -71,6 +71,29 @@ test('merges JSONL result packets', async () => {
     patterns: [{enumerable: false, path: './*', targets: ['./index.js']}],
   })
 })
+test('emits module progress before the container runner finishes', async () => {
+  const events: Array<string> = []
+  const result = await inspectExports({
+    name: 'demo',
+    version: '1.0.0',
+    onModule: exportPath => {
+      events.push(`module:${exportPath}`)
+    },
+    containerRunner: async options => {
+      options.onPacket?.({
+        exportPath: '.',
+        modules: {'.': {default: 'function'}},
+      })
+      events.push('runner finished')
+      return JSON.stringify({
+        exportPath: '.',
+        modules: {'.': {default: 'function'}},
+      })
+    },
+  })
+  expect(events).toEqual(['module:.', 'runner finished'])
+  expect(result.modules['.']).toEqual({default: 'function'})
+})
 test('rejects unsafe package names before container execution', async () => {
   let ranContainer = false
   const result = await inspectExports({

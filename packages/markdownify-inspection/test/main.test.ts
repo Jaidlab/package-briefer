@@ -4,7 +4,7 @@ import {expect, test} from 'bun:test'
 
 import {Temporal} from '@js-temporal/polyfill'
 
-import markdownifyInspection from '../src/main.ts'
+import markdownifyInspection, {renderClankExportModule, renderPackageClank} from '../src/main.ts'
 
 const inspection: Inspection = {
   exports: {
@@ -339,6 +339,23 @@ company Jaid Labs
 `
 test('markdownifies an inspection with tag history', () => {
   expect(markdownifyInspection(inspection, {now})).toBe(expected)
+})
+test('renders standalone Clank streaming fragments and omits streamed sections', () => {
+  expect(renderPackageClank({name: 'demo'})).toBe('package { name demo}')
+  expect(renderClankExportModule('.', {named: {foo: 'function'}})).toBe('## exports\n\n### named\n\nfoo function')
+  expect(renderClankExportModule('./feature', {named: {bar: 'function'}})).toBe('## subpackage exports\n\n### feature\n\n#### named\n\nbar function')
+  expect(renderClankExportModule('./other', {default: 'function'}, false)).toBe('### other\n\n#### default\n\nfunction')
+  const streamedPaths = new Set(['.', './lines'])
+  const markdown = markdownifyInspection(inspection, {
+    clank: true,
+    omitPackage: true,
+    omitExportPaths: streamedPaths,
+    now,
+  })
+  expect(markdown).not.toContain('package {')
+  expect(markdown).not.toContain('## exports')
+  expect(markdown).not.toContain('## subpackage exports')
+  expect(markdown).toContain('# 3 npm releases')
 })
 test('uses Clank for structured blocks when enabled', () => {
   const markdown = markdownifyInspection(inspection, {

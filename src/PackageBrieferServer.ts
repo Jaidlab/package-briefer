@@ -1,8 +1,9 @@
 import type {Inspection, Options as InspectNpmPackageOptions, SamplingOptions} from 'inspect-npm-package'
+import type {Options as MarkdownifyOptions} from 'markdownify-inspection'
 
 import inspectNpmPackage, {PackageNotFoundError, PackageVersionNotFoundError} from 'inspect-npm-package'
 import {LRUCache} from 'lru-cache'
-import markdownifyInspection from 'markdownify-inspection'
+import markdownifyInspection, {renderClankExportModule, renderPackageClank} from 'markdownify-inspection'
 
 import homepage from './homepage.html' with {type: 'text'}
 
@@ -10,11 +11,12 @@ const homepageText = homepage as unknown as string
 const routePrefix = '/npmjs.com/package/'
 
 type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches'>
-type Inspect = (options: InspectionOptions & Pick<InspectNpmPackageOptions, 'onFocusedVersion'> & {
+type InspectionProgress = Pick<InspectNpmPackageOptions, 'onExportModule' | 'onFocusedPackage' | 'onFocusedVersion'>
+type Inspect = (options: InspectionOptions & InspectionProgress & {
   name: string
   version?: string
 }) => Promise<Inspection>
-type Markdownify = (inspection: Inspection, options?: {clank?: boolean}) => string
+type Markdownify = (inspection: Inspection, options?: MarkdownifyOptions) => string
 
 type Route = {
   llms: boolean
@@ -181,17 +183,24 @@ export class PackageBrieferServer {
     })
   }
 
-  private async getInspection(packageName: string, version?: string, onFocusedVersion?: (version: string) => void) {
+  private async getInspection(packageName: string, version?: string, progress: InspectionProgress = {}) {
     const cacheKey = `${packageName}\0${version ?? ''}`
     const cached = this.cache?.get(cacheKey)
     if (cached) {
-      onFocusedVersion?.(cached.focused.version)
+      progress.onFocusedVersion?.(cached.focused.version)
+      progress.onFocusedPackage?.({
+        version: cached.focused.version,
+        package: cached.focused.package,
+      })
+      for (const [exportPath, moduleInspection] of Object.entries(cached.exports?.modules ?? {})) {
+        progress.onExportModule?.(exportPath, moduleInspection)
+      }
       return cached
     }
     const inspection = await this.inspect({
       ...this.inspectionOptions,
       name: packageName,
-      ...onFocusedVersion === undefined ? {} : {onFocusedVersion},
+      ...progress,
       ...version === undefined ? {} : {version},
     })
     this.cache?.set(cacheKey, inspection)
@@ -212,13 +221,50 @@ export class PackageBrieferServer {
           focusedVersion = resolvedVersion
           controller.enqueue(encoder.encode(` ${resolvedVersion}`))
         }
+        let streamedPackage = false
+        let streamedSubpackageHeading = false
+        const streamedExportPaths = new Set<string>
+        const pushFragment = (fragment: string) => {
+          if (canceled || !fragment) {
+            return false
+          }
+          controller.enqueue(encoder.encode(`\n\n${fragment}`))
+          return true
+        }
+        const progress: InspectionProgress = {onFocusedVersion: pushFocusedVersion}
+        if (clank) {
+          progress.onFocusedPackage = focused => {
+            pushFocusedVersion(focused.version)
+            if (!streamedPackage && pushFragment(renderPackageClank(focused.package))) {
+              streamedPackage = true
+            }
+          }
+          progress.onExportModule = (exportPath, moduleInspection) => {
+            if (streamedExportPaths.has(exportPath) || canceled) {
+              return
+            }
+            const includeSubpackageHeading = exportPath === '.' || !streamedSubpackageHeading
+            const fragment = renderClankExportModule(exportPath, moduleInspection, includeSubpackageHeading)
+            if (!pushFragment(fragment)) {
+              return
+            }
+            streamedExportPaths.add(exportPath)
+            if (exportPath !== '.') {
+              streamedSubpackageHeading = true
+            }
+          }
+        }
         try {
-          const inspection = await this.getInspection(packageName, version, pushFocusedVersion)
+          const inspection = await this.getInspection(packageName, version, progress)
           pushFocusedVersion(inspection.focused.version)
           if (canceled) {
             return
           }
-          const markdown = this.markdownify(inspection, {clank})
+          const markdown = this.markdownify(inspection, {
+            clank,
+            omitExportPaths: streamedExportPaths,
+            omitPackage: streamedPackage,
+          })
           const bodyStart = markdown.indexOf('\n')
           controller.enqueue(encoder.encode(bodyStart === -1 ? '' : markdown.slice(bodyStart)))
           controller.close()
