@@ -32,22 +32,37 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
       await mkdir(path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))), {recursive: true})
       await Bun.write(path, source)
     }
-    const child = Bun.spawn([process.execPath, probePath], {
-      cwd: root,
-      env: {
-        ...Bun.env,
-        PACKAGE_NAME: 'demo',
+    let result: ProbeResult | undefined
+    const resultServer = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        result = await request.json() as ProbeResult
+        return new Response(null, {status: 204})
       },
-      stderr: 'pipe',
-      stdout: 'pipe',
     })
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ])
-    expect(exitCode, stderr).toBe(0)
-    return JSON.parse(stdout) as ProbeResult
+    try {
+      const child = Bun.spawn([process.execPath, probePath], {
+        cwd: root,
+        env: {
+          ...Bun.env,
+          PACKAGE_NAME: 'demo',
+          RESULT_ENDPOINT: resultServer.url.href,
+        },
+        stderr: 'pipe',
+        stdout: 'pipe',
+      })
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      expect(exitCode, stderr).toBe(0)
+      expect(result).toBeDefined()
+      void stdout
+      return result as ProbeResult
+    } finally {
+      resultServer.stop(true)
+    }
   } finally {
     await rm(root, {
       force: true,
@@ -69,7 +84,7 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
       './blocked/*': null,
     },
   }, {
-    'index.js': 'export default function demo() {}\nexport const foo = () => {}\nexport function Legacy() {}\nexport const nothing = null',
+    'index.js': "console.log('package output')\nexport default function demo() {}\nexport const foo = () => {}\nexport function Legacy() {}\nexport const nothing = null",
     'feature.js': "export const mode = 'default'",
     'feature-bun.js': "export const mode = 'bun'",
     'features/a.js': 'export const a = 1',

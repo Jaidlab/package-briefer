@@ -1,6 +1,12 @@
+const postResult = globalThis.fetch.bind(globalThis)
+const stringifyJson = JSON.stringify.bind(JSON)
 const moduleName = Bun.env.PACKAGE_NAME
+const resultEndpoint = Bun.env.RESULT_ENDPOINT
 if (!moduleName) {
   throw new Error('PACKAGE_NAME is required')
+}
+if (!resultEndpoint) {
+  throw new Error('RESULT_ENDPOINT is required')
 }
 
 const packageFolder = `${process.cwd()}/node_modules/${moduleName}`
@@ -166,7 +172,14 @@ for (const exportPath of paths) {
     failures[exportPath] = getInspectionFailure(error)
   }
 }
-console.log(JSON.stringify({
-  modules,
-  ...(Object.keys(failures).length ? {failures} : {}),
-}))
+const resultResponse = await postResult(resultEndpoint, {
+  method: 'POST',
+  headers: {'content-type': 'application/json'},
+  body: stringifyJson({
+    modules,
+    ...(Object.keys(failures).length ? {failures} : {}),
+  }),
+})
+if (!resultResponse.ok) {
+  throw new Error(`Could not submit export inspection: HTTP ${resultResponse.status}`)
+}

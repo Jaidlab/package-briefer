@@ -49,6 +49,26 @@ test('resolves latest and inspects exports', async () => {
     },
   ])
 })
+test('merges JSONL result packets', async () => {
+  const result = await inspectExports({
+    name: 'demo',
+    version: '1.0.0',
+    containerRunner: async () => [
+      JSON.stringify({modules: {'.': {default: 'function'}}}),
+      JSON.stringify({
+        modules: {'./feature': {named: {feature: 'function'}}},
+        failures: {'./broken': {name: 'Error', message: 'broken'}},
+      }),
+    ].join('\n'),
+  })
+  expect(result).toEqual({
+    modules: {
+      '.': {default: 'function'},
+      './feature': {named: {feature: 'function'}},
+    },
+    failures: {'./broken': {name: 'Error', message: 'broken'}},
+  })
+})
 test('passes an explicit Docker daemon to the container runner', async () => {
   let runnerOptions: ContainerRunnerOptions | undefined
   const result = await inspectExports({

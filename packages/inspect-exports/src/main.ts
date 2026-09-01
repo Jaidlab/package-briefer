@@ -95,19 +95,58 @@ const executeDocker = async (args: Array<string>, timeoutMs: number, dockerHost?
   }
 }
 
+const resultServerPort = 3000
+const waitForResultServerScript = "for (let attempt = 0; attempt < 100; attempt++) { try { const response = await fetch('http://127.0.0.1:3000'); if (response.ok) process.exit(0) } catch {} await Bun.sleep(20) } process.exit(1)"
+const readResultsScript = "const response = await fetch('http://127.0.0.1:3000'); if (!response.ok) throw new Error('HTTP ' + response.status); process.stdout.write(await response.text())"
+const parseContainerExitCode = (output: string) => {
+  const exitCode = Number.parseInt(output.trim(), 10)
+  if (!Number.isInteger(exitCode)) {
+    throw new Error('Docker returned an invalid container exit code: ' + JSON.stringify(output))
+  }
+  return exitCode
+}
+
 export const runContainer: ContainerRunner = async options => {
   const probe = await Bun.file(new URL('probe.js', import.meta.url)).text()
-  const containerName = `inspect-exports-${crypto.randomUUID()}`
-  const packageSpec = `${options.name}@${options.version}`
+  const resultServer = await Bun.file(new URL('resultServer.js', import.meta.url)).text()
+  const id = crypto.randomUUID()
+  const networkName = 'inspect-exports-' + id
+  const resultContainerName = 'inspect-exports-results-' + id
+  const explorationContainerName = 'inspect-exports-probe-' + id
+  const packageSpec = options.name + '@' + options.version
   try {
+    await executeDocker(['network', 'create', networkName], options.timeoutMs, options.dockerHost)
     await executeDocker([
       'create',
       '--name',
-      containerName,
+      resultContainerName,
+      '--network',
+      networkName,
+      '--network-alias',
+      'results',
       '-e',
-      `PACKAGE_NAME=${options.name}`,
+      'RESULT_SERVER_PORT=' + resultServerPort,
+      options.image,
+      'sh',
+      '-lc',
+      'bun --eval "$1"',
+      'sh',
+      resultServer,
+    ], options.timeoutMs, options.dockerHost)
+    await executeDocker(['start', resultContainerName], options.timeoutMs, options.dockerHost)
+    await executeDocker(['exec', resultContainerName, 'bun', '--eval', waitForResultServerScript], options.timeoutMs, options.dockerHost)
+    await executeDocker([
+      'create',
+      '--name',
+      explorationContainerName,
+      '--network',
+      networkName,
       '-e',
-      `PACKAGE_SPEC=${packageSpec}`,
+      'PACKAGE_NAME=' + options.name,
+      '-e',
+      'PACKAGE_SPEC=' + packageSpec,
+      '-e',
+      'RESULT_ENDPOINT=http://results:' + resultServerPort,
       options.image,
       'sh',
       '-lc',
@@ -115,15 +154,25 @@ export const runContainer: ContainerRunner = async options => {
       'sh',
       probe,
     ], options.timeoutMs, options.dockerHost)
-    return await executeDocker(['start', '-a', containerName], options.timeoutMs, options.dockerHost)
+    await executeDocker(['start', explorationContainerName], options.timeoutMs, options.dockerHost)
+    const explorationExitCode = parseContainerExitCode(await executeDocker(['wait', explorationContainerName], options.timeoutMs, options.dockerHost))
+    if (explorationExitCode !== 0) {
+      throw new Error('Export exploration exited with code ' + explorationExitCode)
+    }
+    return await executeDocker(['exec', resultContainerName, 'bun', '--eval', readResultsScript], options.timeoutMs, options.dockerHost)
   } finally {
+    for (const containerName of [explorationContainerName, resultContainerName]) {
+      try {
+        await executeDocker(['rm', '-f', containerName], 10_000, options.dockerHost)
+      } catch {
+      }
+    }
     try {
-      await executeDocker(['rm', '-f', containerName], 10_000, options.dockerHost)
+      await executeDocker(['network', 'rm', networkName], 10_000, options.dockerHost)
     } catch {
     }
   }
 }
-
 const resolveVersion = async (name: string, fetchImplementation: FetchImplementation) => {
   const response = await fetchImplementation(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
     headers: {accept: 'application/json'},
@@ -161,11 +210,21 @@ const inspectExports = async (options: Options): Promise<Inspection> => {
       timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
       version,
     })
-    const inspection = JSON.parse(output) as unknown
-    if (!inspection || typeof inspection !== 'object' || Array.isArray(inspection) || !('modules' in inspection) || !inspection.modules || typeof inspection.modules !== 'object' || Array.isArray(inspection.modules)) {
-      throw new Error('Export probe returned an invalid inspection')
+    const packets = output.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(line => JSON.parse(line) as unknown)
+    if (!packets.length) {
+      throw new Error('Export exploration produced no result packets')
     }
-    return inspection as Inspection
+    const inspection: Inspection = {modules: {}}
+    for (const packet of packets) {
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet) || !('modules' in packet) || !packet.modules || typeof packet.modules !== 'object' || Array.isArray(packet.modules)) {
+        throw new Error('Export exploration returned an invalid result packet')
+      }
+      Object.assign(inspection.modules, packet.modules)
+      if ('failures' in packet && packet.failures && typeof packet.failures === 'object' && !Array.isArray(packet.failures)) {
+        Object.assign(inspection.failures ??= {}, packet.failures)
+      }
+    }
+    return inspection
   } catch (error) {
     return {
       modules: {},
