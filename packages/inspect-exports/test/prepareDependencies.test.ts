@@ -4,6 +4,8 @@ import {mkdir, mkdtemp, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join, resolve} from 'node:path'
 
+import {getPackageDependencySpec} from '../src/prepareDependencies.js'
+
 /* eslint-enable typescript/no-restricted-imports */
 
 const prepareDependenciesPath = resolve(import.meta.dir, '../src/prepareDependencies.js')
@@ -62,4 +64,10 @@ test('prepares target, peer and optional dependencies', async () => {
       recursive: true,
     })
   }
+})
+
+test('normalizes registry dependency specs for scoped packages', () => {
+  expect(getPackageDependencySpec('@react-three/drei', '@react-three/drei@11.0.0-alpha.5')).toBe('11.0.0-alpha.5')
+  expect(getPackageDependencySpec('demo', 'demo@1.2.3')).toBe('1.2.3')
+  expect(getPackageDependencySpec('demo', 'file:./demo-source')).toBe('file:./demo-source')
 })
