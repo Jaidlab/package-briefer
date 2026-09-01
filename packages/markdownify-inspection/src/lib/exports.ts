@@ -12,10 +12,10 @@ const summarizeExportValue = (value: unknown): Clankable => {
     return value as Clankable
   }
   const record = value as Record<string, unknown>
-  if (record.type === 'object' && 'keys' in record) {
+  if (['object', 'async function', 'class', 'function'].includes(String(record.type)) && 'keys' in record) {
     const keys = record.keys
-    if (typeof keys === 'number' || Array.isArray(keys) && keys.every((key): key is string => typeof key === 'string')) {
-      return {entries: keys}
+    if (typeof keys === 'number' || Array.isArray(keys)) {
+      return record.type === 'object' ? {entries: keys as Clankable} : {type: record.type as Clankable, entries: keys as Clankable}
     }
   }
   if (record.type === 'array' && typeof record.length === 'number') {

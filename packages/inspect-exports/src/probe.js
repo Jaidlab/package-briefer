@@ -14,11 +14,20 @@ if (!resultEndpoint) {
 }
 
 const classPattern = /^\s*class(?:\s|\{)/u
+const intrinsicFunctionKeys = new Set(['arguments', 'caller', 'length', 'name', 'prototype'])
+const serializePropertyKey = key => typeof key === 'symbol' ? {symbol: key.description ?? null} : key
+const describeKeys = (value, ignoredStringKeys) => {
+  const keys = Reflect.ownKeys(value).filter(key => typeof key !== 'string' || !ignoredStringKeys?.has(key)).map(serializePropertyKey)
+  return keys.length > 20 ? keys.length : keys
+}
 const describeFunction = value => {
-  if (value.constructor?.name === 'AsyncFunction') {
-    return 'async function'
-  }
-  return classPattern.test(Function.prototype.toString.call(value)) ? 'class' : 'function'
+  const type = value.constructor?.name === 'AsyncFunction'
+    ? 'async function'
+    : classPattern.test(Function.prototype.toString.call(value))
+      ? 'class'
+      : 'function'
+  const keys = describeKeys(value, intrinsicFunctionKeys)
+  return Array.isArray(keys) && keys.length === 0 ? type : {type, keys}
 }
 const describe = value => {
   if (value === null) {
@@ -31,8 +40,7 @@ const describe = value => {
     return {type: 'array', length: value.length}
   }
   if (typeof value === 'object') {
-    const keys = Object.keys(value)
-    return {type: 'object', keys: keys.length > 20 ? keys.length : keys}
+    return {type: 'object', keys: describeKeys(value)}
   }
   if (typeof value === 'function') {
     return describeFunction(value)

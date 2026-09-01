@@ -76,7 +76,14 @@ test('inspects one export path without using package stdout as the protocol', as
 export default function demo() {}
 export const foo = () => {}
 export function Legacy() {}
-export class Modern {}
+export class Modern {
+  static hidden() {}
+  static [Symbol.for('classSymbol')]() {}
+}
+const objectApi = {}
+Object.defineProperty(objectApi, 'hidden', {value: true})
+objectApi[Symbol.for('objectSymbol')] = true
+export {objectApi}
 export const nothing = null`,
   })
   expect(stdout).toContain('package output')
@@ -88,7 +95,14 @@ export const nothing = null`,
         named: {
           foo: 'function',
           Legacy: 'function',
-          Modern: 'class',
+          Modern: {
+            type: 'class',
+            keys: ['hidden', {symbol: 'classSymbol'}],
+          },
+          objectApi: {
+            type: 'object',
+            keys: ['hidden', {symbol: 'objectSymbol'}],
+          },
           nothing: 'null',
         },
       },
@@ -137,7 +151,10 @@ module.exports.bar = () => {}`,
     exportPath: '.',
     modules: {
       '.': {
-        default: 'function',
+        default: {
+          type: 'function',
+          keys: ['bar'],
+        },
         named: {bar: 'function'},
       },
     },

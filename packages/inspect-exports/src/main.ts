@@ -1,7 +1,13 @@
+export type ExportKey = string | {symbol: string | null}
+
 export type ExportValue
   = | {
-    keys: Array<string> | number
+    keys: Array<ExportKey> | number
     type: 'object'
+  }
+  | {
+    keys: Array<ExportKey> | number
+    type: 'async function' | 'class' | 'function'
   }
   | {
     length: number

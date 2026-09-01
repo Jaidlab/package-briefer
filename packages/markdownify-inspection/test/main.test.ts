@@ -418,6 +418,24 @@ test('simplifies runtime export value descriptors in Markdown', () => {
   }, {now})
   expect(markdown).toContain('{"named":{"Children":{"entries":["map","forEach","count"]},"blockFences":{"items":12},"version":{"string":"19.2.8"}}}')
 })
+test('preserves symbol and non-enumerable export keys', () => {
+  const markdown = markdownifyInspection({
+    ...inspection,
+    exports: {
+      modules: {
+        '.': {
+          named: {
+            Api: {
+              type: 'class',
+              keys: ['hidden', {symbol: 'token'}],
+            },
+          },
+        },
+      },
+    },
+  }, {now})
+  expect(markdown).toContain('{"named":{"Api":{"type":"class","entries":["hidden",{"symbol":"token"}]}}}')
+})
 test('renders non-enumerable export patterns', () => {
   const markdown = markdownifyInspection({
     ...inspection,
