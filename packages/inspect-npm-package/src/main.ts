@@ -53,17 +53,26 @@ const getVersionRepository = (packument: NpmPackument, version: string) => packu
 const getBriefPackage = (metadata: PackumentVersion): BriefPackage => {
   return {
     ...metadata.bin === undefined ? {} : {bin: metadata.bin},
+    ...metadata.browser === undefined ? {} : {browser: metadata.browser},
+    ...metadata.cpu === undefined ? {} : {cpu: metadata.cpu},
     ...metadata.dependencies === undefined ? {} : {dependencies: metadata.dependencies},
     ...metadata.description === undefined ? {} : {description: metadata.description},
     ...metadata.engines === undefined ? {} : {engines: metadata.engines},
     ...metadata.exports === undefined ? {} : {exports: metadata.exports},
     ...metadata.imports === undefined ? {} : {imports: metadata.imports},
     ...metadata.keywords === undefined ? {} : {keywords: metadata.keywords},
+    ...metadata.main === undefined ? {} : {main: metadata.main},
+    ...metadata.module === undefined ? {} : {module: metadata.module},
     ...metadata.name === undefined ? {} : {name: metadata.name},
     ...metadata.optionalDependencies === undefined ? {} : {optionalDependencies: metadata.optionalDependencies},
+    ...metadata.os === undefined ? {} : {os: metadata.os},
     ...metadata.peerDependencies === undefined ? {} : {peerDependencies: metadata.peerDependencies},
     ...metadata.peerDependenciesMeta === undefined ? {} : {peerDependenciesMeta: metadata.peerDependenciesMeta},
+    ...metadata.sideEffects === undefined ? {} : {sideEffects: metadata.sideEffects},
     ...metadata.type === undefined ? {} : {type: metadata.type},
+    ...metadata.types === undefined ? {} : {types: metadata.types},
+    ...metadata.typesVersions === undefined ? {} : {typesVersions: metadata.typesVersions},
+    ...metadata.typings === undefined ? {} : {typings: metadata.typings},
   }
 }
 const inspectNpmPackage = async (options: Options): Promise<Inspection> => {

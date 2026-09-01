@@ -1,7 +1,7 @@
 import type {Inspection as ExportsInspection} from 'inspect-exports'
 import type {PackageJson} from 'type-fest'
 
-export type BriefPackage = Pick<PackageJson, 'bin' | 'dependencies' | 'description' | 'engines' | 'exports' | 'imports' | 'keywords' | 'name' | 'optionalDependencies' | 'peerDependencies' | 'peerDependenciesMeta' | 'type'>
+export type BriefPackage = Pick<PackageJson, 'bin' | 'browser' | 'cpu' | 'dependencies' | 'description' | 'engines' | 'exports' | 'imports' | 'keywords' | 'main' | 'module' | 'name' | 'optionalDependencies' | 'os' | 'peerDependencies' | 'peerDependenciesMeta' | 'sideEffects' | 'type' | 'types' | 'typesVersions' | 'typings'>
 
 export type EasyDate = {
   absolute: string
