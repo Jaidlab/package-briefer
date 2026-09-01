@@ -65,7 +65,7 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
       './blocked/*': null,
     },
   }, {
-    'index.js': 'export default function demo() {}\nexport const foo = () => {}\nexport function Legacy() {}',
+    'index.js': 'export default function demo() {}\nexport const foo = () => {}\nexport function Legacy() {}\nexport const nothing = null',
     'feature.js': "export const mode = 'default'",
     'feature-bun.js': "export const mode = 'bun'",
     'features/a.js': 'export const a = 1',
@@ -78,6 +78,7 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
       named: {
         foo: 'function',
         Legacy: 'function',
+        nothing: 'null',
       },
     },
     './feature': {

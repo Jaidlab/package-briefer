@@ -28,6 +28,9 @@ const describeFunction = value => {
 }
 
 const describe = value => {
+  if (value === null) {
+    return 'null'
+  }
   if (typeof value === 'string') {
     return value.length < 100 ? {type: 'string', value} : {type: 'string', length: value.length}
   }

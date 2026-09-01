@@ -21,6 +21,7 @@ export type ExportValue
   | 'class'
   | 'function'
   | 'number'
+  | 'null'
   | 'string'
   | 'symbol'
   | 'undefined'
