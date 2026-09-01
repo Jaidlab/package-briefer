@@ -10,7 +10,7 @@ const homepageText = homepage as unknown as string
 const routePrefix = '/npmjs.com/package/'
 
 type InspectionOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches'>
-type Inspect = (options: InspectionOptions & {
+type Inspect = (options: InspectionOptions & Pick<InspectNpmPackageOptions, 'onFocusedVersion'> & {
   name: string
   version?: string
 }) => Promise<Inspection>
@@ -136,16 +136,11 @@ export class PackageBrieferServer {
         headers: {allow: 'GET'},
       })
     }
+    if (route.llms) {
+      return this.getMarkdownResponse(route.packageName, route.version, getClank(url, this.defaultClank))
+    }
     try {
       const inspection = await this.getInspection(route.packageName, route.version)
-      if (route.llms) {
-        return new Response(this.markdownify(inspection, {clank: getClank(url, this.defaultClank)}), {
-          headers: {
-            'access-control-allow-origin': '*',
-            'content-type': 'text/plain; charset=utf-8',
-          },
-        })
-      }
       return Response.json(inspection, {
         headers: {
           'access-control-allow-origin': '*',
@@ -154,7 +149,7 @@ export class PackageBrieferServer {
     } catch (error) {
       const status = error instanceof PackageNotFoundError || error instanceof PackageVersionNotFoundError ? 404 : 502
       const message = error instanceof Error ? error.message : String(error)
-      return errorResponse(message, status, route.llms)
+      return errorResponse(message, status, false)
     }
   }
 
@@ -186,19 +181,68 @@ export class PackageBrieferServer {
     })
   }
 
-  private async getInspection(packageName: string, version?: string) {
+  private async getInspection(packageName: string, version?: string, onFocusedVersion?: (version: string) => void) {
     const cacheKey = `${packageName}\0${version ?? ''}`
     const cached = this.cache?.get(cacheKey)
     if (cached) {
+      onFocusedVersion?.(cached.focused.version)
       return cached
     }
     const inspection = await this.inspect({
       ...this.inspectionOptions,
       name: packageName,
+      ...onFocusedVersion === undefined ? {} : {onFocusedVersion},
       ...version === undefined ? {} : {version},
     })
     this.cache?.set(cacheKey, inspection)
     return inspection
+  }
+
+  private getMarkdownResponse(packageName: string, version: string | undefined, clank: boolean) {
+    const encoder = new TextEncoder
+    let canceled = false
+    const body = new ReadableStream<Uint8Array>({
+      start: async controller => {
+        controller.enqueue(encoder.encode(`# ${packageName}`))
+        let focusedVersion: string | undefined
+        const pushFocusedVersion = (resolvedVersion: string) => {
+          if (canceled || focusedVersion !== undefined) {
+            return
+          }
+          focusedVersion = resolvedVersion
+          controller.enqueue(encoder.encode(` ${resolvedVersion}`))
+        }
+        try {
+          const inspection = await this.getInspection(packageName, version, pushFocusedVersion)
+          pushFocusedVersion(inspection.focused.version)
+          if (canceled) {
+            return
+          }
+          const markdown = this.markdownify(inspection, {clank})
+          const bodyStart = markdown.indexOf('\n')
+          controller.enqueue(encoder.encode(bodyStart === -1 ? '' : markdown.slice(bodyStart)))
+          controller.close()
+        } catch (error) {
+          if (canceled) {
+            return
+          }
+          const message = error instanceof Error ? error.message : String(error)
+          controller.enqueue(encoder.encode(`\n\n## Error\n\n${message}\n`))
+          controller.close()
+        }
+      },
+      cancel: () => {
+        canceled = true
+      },
+    })
+    return new Response(body, {
+      headers: {
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-transform',
+        'content-type': 'text/plain; charset=utf-8',
+        'x-content-type-options': 'nosniff',
+      },
+    })
   }
 }
 

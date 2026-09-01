@@ -38,21 +38,24 @@ const inspection: Inspection = {
     },
   },
 }
-type InspectOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost'> & {name: string
+type InspectOptions = SamplingOptions & Pick<InspectNpmPackageOptions, 'exportsDockerHost' | 'externalCaches' | 'onFocusedVersion'> & {name: string
   version?: string}
-const inspectCalls: Array<InspectOptions> = []
+type LoggedInspectOptions = Omit<InspectOptions, 'onFocusedVersion'>
+const inspectCalls: Array<LoggedInspectOptions> = []
 const inspect = async (options: InspectOptions) => {
-  inspectCalls.push(options)
+  const {onFocusedVersion, ...loggedOptions} = options
+  inspectCalls.push(loggedOptions)
   if (options.name === 'missing') {
     throw new PackageNotFoundError(options.name)
   }
   if (options.version === '9.9.9') {
     throw new PackageVersionNotFoundError(options.name, options.version)
   }
+  onFocusedVersion?.(inspection.focused.version)
   return inspection
 }
 const markdownify = () => '# demo 1.0.0\n'
-const renderClank = (_inspection: Inspection, options?: {clank?: boolean}) => String(options?.clank)
+const renderClank = (_inspection: Inspection, options?: {clank?: boolean}) => `# demo 1.0.0\n\n${String(options?.clank)}`
 test('serves the HTML homepage', async () => {
   inspectCalls.length = 0
   const server = new PackageBrieferServer(inspect, markdownify, 0)
@@ -82,23 +85,54 @@ test('serves llms.txt', async () => {
   expect(await response.text()).toBe('# demo 1.0.0\n')
   expect(inspectCalls.at(-1)).toEqual({name: 'demo'})
 })
+test('streams llms.txt in three chunks', async () => {
+  let focus: (() => void) | undefined
+  let finish: (() => void) | undefined
+  const controlledInspect = (options: InspectOptions) => new Promise<Inspection>(resolve => {
+    focus = () => options.onFocusedVersion?.('1.0.0')
+    finish = () => resolve(inspection)
+  })
+  const server = new PackageBrieferServer(controlledInspect, () => '# demo 1.0.0\n\nbody\n', 0)
+  const response = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt'))
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Response has no body')
+  }
+  const decoder = new TextDecoder
+  const readChunk = async () => {
+    const chunk = await reader.read()
+    if (!(chunk.value instanceof Uint8Array)) {
+      throw new TypeError('Expected response chunk')
+    }
+    return decoder.decode(chunk.value)
+  }
+  expect(await readChunk()).toBe('# demo')
+  const focusedChunk = readChunk()
+  focus?.()
+  expect(await focusedChunk).toBe(' 1.0.0')
+  const bodyChunk = readChunk()
+  finish?.()
+  expect(await bodyChunk).toBe('\n\nbody\n')
+  const end = await reader.read()
+  expect(end.done).toBe(true)
+})
 test('overrides Clank rendering per request', async () => {
   inspectCalls.length = 0
   const server = new PackageBrieferServer(inspect, renderClank, 0, {}, 100, false)
   const enabled = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=true'))
-  expect(await enabled.text()).toBe('true')
+  expect(await enabled.text()).toBe('# demo 1.0.0\n\ntrue')
   const disabled = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=false'))
-  expect(await disabled.text()).toBe('false')
+  expect(await disabled.text()).toBe('# demo 1.0.0\n\nfalse')
 })
 test('uses the server Clank default when the query override is absent or invalid', async () => {
   inspectCalls.length = 0
   const server = new PackageBrieferServer(inspect, renderClank, 0, {}, 100, true)
   const defaultResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt'))
-  expect(await defaultResponse.text()).toBe('true')
+  expect(await defaultResponse.text()).toBe('# demo 1.0.0\n\ntrue')
   const invalidResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=yes'))
-  expect(await invalidResponse.text()).toBe('true')
+  expect(await invalidResponse.text()).toBe('# demo 1.0.0\n\ntrue')
   const overriddenResponse = await server.fetch(new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt?clank=false'))
-  expect(await overriddenResponse.text()).toBe('false')
+  expect(await overriddenResponse.text()).toBe('# demo 1.0.0\n\nfalse')
 })
 test('serves a focused version as JSON', async () => {
   inspectCalls.length = 0
@@ -176,12 +210,12 @@ test('passes the exports Docker daemon to the inspector', async () => {
 test('caches Inspection objects but renders Markdown for every request', async () => {
   inspectCalls.length = 0
   let renders = 0
-  const server = new PackageBrieferServer(inspect, () => `render ${++renders}`, 60)
+  const server = new PackageBrieferServer(inspect, () => `# demo 1.0.0\n\nrender ${++renders}`, 60)
   const request = new Request('http://127.0.0.1:944/npmjs.com/package/demo/llms.txt')
   const firstResponse = await server.fetch(request)
-  expect(await firstResponse.text()).toBe('render 1')
+  expect(await firstResponse.text()).toBe('# demo 1.0.0\n\nrender 1')
   const secondResponse = await server.fetch(request)
-  expect(await secondResponse.text()).toBe('render 2')
+  expect(await secondResponse.text()).toBe('# demo 1.0.0\n\nrender 2')
   expect(inspectCalls).toHaveLength(1)
 })
 test('does not cache when cache-seconds is zero', async () => {

@@ -39,6 +39,7 @@ export type Options = SamplingOptions & {
   githubToken?: string
   name: string
   now?: Temporal.Instant
+  onFocusedVersion?: (version: string) => void
   version?: string
 }
 
@@ -105,6 +106,7 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
   if (!focusedEntry) {
     throw new PackageVersionNotFoundError(packument.name, focusedVersion)
   }
+  options.onFocusedVersion?.(focusedVersion)
   const exportsPromise = (async () => {
     try {
       return await (options.exportsInspector ?? inspectExports)({

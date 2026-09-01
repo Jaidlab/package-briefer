@@ -609,7 +609,7 @@ test('focuses an explicit version', async () => {
     fetch: fetchMock,
     now,
     exportsInspector: async options => {
-      inspectedVersion = options.version
+      inspectedVersion = options.version ?? ''
       return {'.': {default: 'function'}}
     },
   })
@@ -619,18 +619,27 @@ test('focuses an explicit version', async () => {
   expect(inspection.exports).toEqual({'.': {default: 'function'}})
 })
 test('focuses a release tag', async () => {
+  let focusedVersion = ''
   let inspectedVersion = ''
+  const events: Array<string> = []
   const inspection = await inspectNpmPackage({
     name: 'demo',
     version: 'beta',
     fetch: fetchMock,
     now,
+    onFocusedVersion: version => {
+      focusedVersion = version
+      events.push('focused')
+    },
     exportsInspector: async options => {
-      inspectedVersion = options.version
+      inspectedVersion = options.version ?? ''
+      events.push('exports')
       return {'.': {default: 'function'}}
     },
   })
+  expect(focusedVersion).toBe('3.0.0-beta.1')
   expect(inspectedVersion).toBe('3.0.0-beta.1')
+  expect(events.slice(0, 2)).toEqual(['focused', 'exports'])
   expect(inspection.focused.version).toBe('3.0.0-beta.1')
 })
 test('throws PackageVersionNotFoundError', async () => {
