@@ -71,6 +71,25 @@ test('merges JSONL result packets', async () => {
     patterns: [{enumerable: false, path: './*', targets: ['./index.js']}],
   })
 })
+test('rejects unsafe package names before container execution', async () => {
+  let ranContainer = false
+  const result = await inspectExports({
+    name: '../demo',
+    version: '1.0.0',
+    containerRunner: async () => {
+      ranContainer = true
+      return ''
+    },
+  })
+  expect(ranContainer).toBe(false)
+  expect(result).toEqual({
+    modules: {},
+    error: {
+      name: 'Error',
+      message: 'Invalid npm package name: ../demo',
+    },
+  })
+})
 test('passes an explicit Docker daemon to the container runner', async () => {
   let runnerOptions: ContainerRunnerOptions | undefined
   const result = await inspectExports({

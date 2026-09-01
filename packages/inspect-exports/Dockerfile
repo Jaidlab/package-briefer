@@ -2,6 +2,7 @@ ARG BUN_IMAGE=oven/bun:slim
 FROM ${BUN_IMAGE}
 
 WORKDIR /probe
+COPY src/packageLocation.ts /inspect/packageLocation.ts
 COPY src/prepareDependencies.js /inspect/prepareDependencies.js
 COPY src/discover.js /inspect/discover.js
 COPY src/probe.js /inspect/probe.js

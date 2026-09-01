@@ -1,10 +1,11 @@
+import {findPackageLocation} from './packageLocation.ts'
+
 const moduleName = Bun.env.PACKAGE_NAME
 if (!moduleName) {
   throw new Error('PACKAGE_NAME is required')
 }
 
-const packageFolder = `${process.cwd()}/node_modules/${moduleName}`
-const packageJson = await Bun.file(`${packageFolder}/package.json`).json()
+const {packageFolder, packageJson} = await findPackageLocation(moduleName)
 const collectTargets = (value, targets = []) => {
   if (typeof value === 'string') {
     targets.push(value)

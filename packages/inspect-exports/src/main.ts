@@ -1,3 +1,5 @@
+import {getPackageNameParts} from './packageLocation.ts'
+
 export type ExportKey = string | {symbol: string | null}
 
 export type ExportValue
@@ -300,6 +302,7 @@ const resolveVersion = async (name: string, fetchImplementation: FetchImplementa
 }
 const inspectExports = async (options: Options): Promise<Inspection> => {
   try {
+    getPackageNameParts(options.name)
     const fetchImplementation = options.fetch ?? fetch
     const version = options.version ?? await resolveVersion(options.name, fetchImplementation)
     const output = await (options.containerRunner ?? runContainer)({

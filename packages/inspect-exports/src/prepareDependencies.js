@@ -1,3 +1,5 @@
+import {findPackageLocation} from './packageLocation.ts'
+
 const moduleName = Bun.env.PACKAGE_NAME
 const packageSpec = Bun.env.PACKAGE_SPEC
 if (!moduleName) {
@@ -7,8 +9,7 @@ if (!packageSpec) {
   throw new Error('PACKAGE_SPEC is required')
 }
 
-const packageFolder = `${process.cwd()}/node_modules/${moduleName}`
-const packageJson = await Bun.file(`${packageFolder}/package.json`).json()
+const {packageJson} = await findPackageLocation(moduleName)
 const peerDependencies = packageJson.peerDependencies ?? {}
 const optionalDependencies = packageJson.optionalDependencies ?? {}
 await Bun.write('package.json', JSON.stringify({
