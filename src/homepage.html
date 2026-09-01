@@ -5,25 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 html {
-  background: black;
   height: 100%;
+  color: white;
+  background: black;
+  color-scheme: dark;
+}
+@media not (prefers-color-scheme: dark) {
+  html {
+    color: black;
+    background: white;
+    color-scheme: light;
+  }
 }
 body {
   margin: auto;
-  place-self: center;
   height: stretch;
-  place-content: center;
-  font-family: Geologica, ui-sans-serif, sans-serif;
+  font-family: Rubik, Geologica, Roboto, sans-serif;
   display: flex;
   flex-direction: column;
+  place-content: center;
+  align-items: center;
+  place-self: center;
+  font-size: 16px;
 }
 a {
-  color: white;
+  color: inherit;
   text-decoration: none;
   padding: 6px;
+  text-fit: grow 150%;
+  min-width: 80px;
+  height: 2em;
+  align-content: center;
 }
 a:hover {
   text-decoration: underline;
+  text-underline-position: from-font;
+  text-decoration-thickness: 1px;
 }
 </style>
 </head>
