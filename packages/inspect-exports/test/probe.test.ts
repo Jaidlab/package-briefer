@@ -2,26 +2,22 @@
 import {expect, test} from 'bun:test'
 import {mkdir, mkdtemp, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
-import {join, resolve} from 'node:path'
+import {dirname, join, resolve} from 'node:path'
 
 /* eslint-enable typescript/no-restricted-imports */
 
 const probePath = resolve(import.meta.dir, '../src/probe.js')
-type ProbeResult = {
+type ProbePacket = {
+  exportPath: string
   failures?: Record<string, {message: string; name?: string}>
   modules: Record<string, unknown>
 }
-const runProbe = async (packageJson: Record<string, unknown>, files: Record<string, string>, rootFiles: Record<string, string> = {}) => {
+const runProbe = async (packageJson: Record<string, unknown>, files: Record<string, string>, exportPath = '.') => {
   const root = await mkdtemp(join(tmpdir(), 'inspect-exports-probe-'))
   const packageFolder = join(root, 'node_modules', 'demo')
   await mkdir(packageFolder, {recursive: true})
   try {
     await Bun.write(join(root, 'package.json'), JSON.stringify({type: 'module'}))
-    for (const [file, source] of Object.entries(rootFiles)) {
-      const path = join(root, file)
-      await mkdir(path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))), {recursive: true})
-      await Bun.write(path, source)
-    }
     await Bun.write(join(packageFolder, 'package.json'), JSON.stringify({
       type: 'module',
       name: 'demo',
@@ -29,14 +25,14 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
     }))
     for (const [file, source] of Object.entries(files)) {
       const path = join(packageFolder, file)
-      await mkdir(path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))), {recursive: true})
+      await mkdir(dirname(path), {recursive: true})
       await Bun.write(path, source)
     }
-    let result: ProbeResult | undefined
+    let result: ProbePacket | undefined
     const resultServer = Bun.serve({
       port: 0,
       async fetch(request) {
-        result = await request.json() as ProbeResult
+        result = await request.json() as ProbePacket
         return new Response(null, {status: 204})
       },
     })
@@ -45,6 +41,7 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
         cwd: root,
         env: {
           ...Bun.env,
+          EXPORT_PATH: exportPath,
           PACKAGE_NAME: 'demo',
           RESULT_ENDPOINT: resultServer.url.href,
         },
@@ -58,8 +55,10 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
       ])
       expect(exitCode, stderr).toBe(0)
       expect(result).toBeDefined()
-      void stdout
-      return result as ProbeResult
+      return {
+        packet: result as ProbePacket,
+        stdout,
+      }
     } finally {
       resultServer.stop(true)
     }
@@ -70,161 +69,92 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
     })
   }
 }
-test('inspects explicit, conditional and wildcard export paths', async () => {
-  const result = await runProbe({
-    exports: {
-      '.': './index.js',
-      './package.json': './package.json',
-      './metadata': './package.json',
-      './feature': {
-        bun: './feature-bun.js',
-        default: './feature.js',
-      },
-      './features/*': './features/*.js',
-      './blocked/*': null,
-    },
-  }, {
-    'index.js': "console.log('package output')\nexport default function demo() {}\nexport const foo = () => {}\nexport function Legacy() {}\nexport const nothing = null",
-    'feature.js': "export const mode = 'default'",
-    'feature-bun.js': "export const mode = 'bun'",
-    'features/a.js': 'export const a = 1',
-    'features/b.js': 'export class B {}',
-    'blocked/private.js': 'export const secret = true',
+
+test('inspects one export path without using package stdout as the protocol', async () => {
+  const {packet, stdout} = await runProbe({exports: './index.js'}, {
+    'index.js': `console.log('package output')
+export default function demo() {}
+export const foo = () => {}
+export function Legacy() {}
+export class Modern {}
+export const nothing = null`,
   })
-  expect(result).toEqual({
+  expect(stdout).toContain('package output')
+  expect(packet).toEqual({
+    exportPath: '.',
     modules: {
       '.': {
-      default: 'function',
-      named: {
-        foo: 'function',
-        Legacy: 'function',
-        nothing: 'null',
-      },
-    },
-    './feature': {
-      named: {
-        mode: {
-          type: 'string',
-          value: 'bun',
-        },
-      },
-    },
-    './features/a': {
-      named: {
-        a: 'number',
-      },
-    },
-      './features/b': {
+        default: 'function',
         named: {
-          B: 'class',
+          foo: 'function',
+          Legacy: 'function',
+          Modern: 'class',
+          nothing: 'null',
         },
       },
     },
   })
 })
-test('preserves default exports without inferring CommonJS', async () => {
-  const result = await runProbe({
-    exports: {
-      '.': './default-object.js',
-      './alias': './alias.js',
-      './commonjs': './commonjs.cjs',
-    },
-  }, {
+test('preserves ESM defaults and CommonJS functions', async () => {
+  expect((await runProbe({exports: './default-object.js'}, {
     'default-object.js': 'export default {foo: 1}',
-    'alias.js': 'const foo = {}\nexport {foo}\nexport default {foo}',
-    'commonjs.cjs': 'module.exports = function demo() {}\nmodule.exports.bar = () => {}',
-  })
-  expect(result.modules['.']).toEqual({
-    default: {
-      type: 'object',
-      keys: ['foo'],
-    },
-  })
-  expect(result.modules['./alias']).toEqual({
-    default: {
-      type: 'object',
-      keys: ['foo'],
-    },
-    named: {
-      foo: {
-        type: 'object',
-        keys: [],
-      },
-    },
-  })
-  expect(result.modules['./commonjs']).toMatchObject({
-    default: 'function',
-    named: {bar: 'function'},
-  })
-})
-test('inspects only the package root when exports is absent', async () => {
-  expect(await runProbe({}, {
-    'index.js': 'export const root = true',
-  })).toEqual({
+  })).packet).toEqual({
+    exportPath: '.',
     modules: {
       '.': {
-      named: {
-          root: 'boolean',
+        default: {
+          type: 'object',
+          keys: ['foo'],
         },
       },
     },
   })
-})
-test('installs declared peer dependencies before inspecting exports', async () => {
-  expect(await runProbe({
-    exports: './index.js',
-    peerDependencies: {
-      'peer-demo': 'file:./peer-demo',
-    },
-    peerDependenciesMeta: {
-      'peer-demo': {optional: true},
-    },
-  }, {
-    'index.js': "export {version} from 'peer-demo'",
-  }, {
-    'peer-demo/package.json': JSON.stringify({
-      exports: './index.js',
-      name: 'peer-demo',
-      type: 'module',
-      version: '2.0.0',
-    }),
-    'peer-demo/index.js': "export const version = '2.0.0'",
-    'node_modules/peer-demo/package.json': JSON.stringify({
-      exports: './index.js',
-      name: 'peer-demo',
-      type: 'module',
-      version: '1.0.0',
-    }),
-    'node_modules/peer-demo/index.js': "export const version = '1.0.0'",
-  })).toEqual({
+  expect((await runProbe({exports: './alias.js'}, {
+    'alias.js': `const foo = {}
+export {foo}
+export default {foo}`,
+  })).packet).toEqual({
+    exportPath: '.',
     modules: {
       '.': {
+        default: {
+          type: 'object',
+          keys: ['foo'],
+        },
         named: {
-          version: {
-            type: 'string',
-            value: '2.0.0',
+          foo: {
+            type: 'object',
+            keys: [],
           },
         },
       },
     },
   })
-})
-
-test('reports module evaluation failures', async () => {
-  const result = await runProbe({
-    exports: {
-      '.': './index.js',
-      './broken': './broken.js',
+  expect((await runProbe({exports: './commonjs.cjs'}, {
+    'commonjs.cjs': `module.exports = function demo() {}
+module.exports.bar = () => {}`,
+  })).packet).toMatchObject({
+    exportPath: '.',
+    modules: {
+      '.': {
+        default: 'function',
+        named: {bar: 'function'},
+      },
     },
-  }, {
-    'index.js': 'export const healthy = true',
+  })
+})
+test('reports module evaluation failures for its export path', async () => {
+  const {packet} = await runProbe({exports: './broken.js'}, {
     'broken.js': "throw new TypeError('broken export')",
   })
-  expect(result.modules['.']).toEqual({named: {healthy: 'boolean'}})
-  expect(result.failures).toEqual({
-    './broken': {
-      name: 'TypeError',
-      message: 'broken export',
+  expect(packet).toEqual({
+    exportPath: '.',
+    modules: {},
+    failures: {
+      '.': {
+        name: 'TypeError',
+        message: 'broken export',
+      },
     },
   })
 })

@@ -95,26 +95,100 @@ const executeDocker = async (args: Array<string>, timeoutMs: number, dockerHost?
   }
 }
 
+export const getInspectionFailure = (error: unknown): InspectionFailure => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      ...error.name ? {name: error.name} : {},
+    }
+  }
+  return {message: String(error)}
+}
+
 const resultServerPort = 3000
-const waitForResultServerScript = "for (let attempt = 0; attempt < 100; attempt++) { try { const response = await fetch('http://127.0.0.1:3000'); if (response.ok) process.exit(0) } catch {} await Bun.sleep(20) } process.exit(1)"
-const readResultsScript = "const response = await fetch('http://127.0.0.1:3000'); if (!response.ok) throw new Error('HTTP ' + response.status); process.stdout.write(await response.text())"
+const resultServerUrl = `http://127.0.0.1:${resultServerPort}`
+const waitForResultServerScript = `for (let attempt = 0; attempt < 100; attempt++) { try { const response = await fetch('${resultServerUrl}'); if (response.ok) process.exit(0) } catch {} await Bun.sleep(20) } process.exit(1)`
+const readResultsScript = `const response = await fetch('${resultServerUrl}'); if (!response.ok) throw new Error('HTTP ' + response.status); process.stdout.write(await response.text())`
 const parseContainerExitCode = (output: string) => {
   const exitCode = Number.parseInt(output.trim(), 10)
   if (!Number.isInteger(exitCode)) {
-    throw new Error('Docker returned an invalid container exit code: ' + JSON.stringify(output))
+    throw new Error(`Docker returned an invalid container exit code: ${JSON.stringify(output)}`)
   }
   return exitCode
 }
+const parseDiscoveredPaths = (output: string) => {
+  const paths = JSON.parse(output) as unknown
+  if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === 'string')) {
+    throw new Error('Export discovery returned invalid paths')
+  }
+  return paths
+}
+const getReportedPaths = (output: string) => new Set(output
+  .split(/\r?\n/u)
+  .map(line => line.trim())
+  .filter(Boolean)
+  .map(line => JSON.parse(line) as {exportPath?: unknown})
+  .map(packet => packet.exportPath)
+  .filter((exportPath): exportPath is string => typeof exportPath === 'string'))
 
 export const runContainer: ContainerRunner = async options => {
-  const probe = await Bun.file(new URL('probe.js', import.meta.url)).text()
   const resultServer = await Bun.file(new URL('resultServer.js', import.meta.url)).text()
+  const packageFolder = `${import.meta.dir}/..`
+  const dockerfile = `${packageFolder}/Dockerfile`
   const id = crypto.randomUUID()
-  const networkName = 'inspect-exports-' + id
-  const resultContainerName = 'inspect-exports-results-' + id
-  const explorationContainerName = 'inspect-exports-probe-' + id
-  const packageSpec = options.name + '@' + options.version
+  const imageName = `inspect-exports:${id}`
+  const networkName = `inspect-exports-${id}`
+  const resultContainerName = `inspect-exports-results-${id}`
+  const discoveryContainerName = `inspect-exports-discovery-${id}`
+  const packageSpec = `${options.name}@${options.version}`
+  const removeContainer = async (name: string) => {
+    try {
+      await executeDocker(['rm', '-f', name], 10_000, options.dockerHost)
+    } catch {
+    }
+  }
+  const waitForContainer = async (name: string) => parseContainerExitCode(await executeDocker(['wait', name], options.timeoutMs, options.dockerHost))
+  const readResults = () => executeDocker(['exec', resultContainerName, 'bun', '--eval', readResultsScript], options.timeoutMs, options.dockerHost)
+  const submitFailure = async (exportPath: string, error: unknown) => {
+    const packet = JSON.stringify({
+      exportPath,
+      modules: {},
+      failures: {[exportPath]: getInspectionFailure(error)},
+    })
+    const script = `const response = await fetch('${resultServerUrl}', {method: 'POST', headers: {'content-type': 'application/json'}, body: ${JSON.stringify(packet)}}); if (!response.ok) process.exit(1)`
+    await executeDocker(['exec', resultContainerName, 'bun', '--eval', script], options.timeoutMs, options.dockerHost)
+  }
   try {
+    await executeDocker([
+      'build',
+      '--tag',
+      imageName,
+      '--build-arg',
+      `BUN_IMAGE=${options.image}`,
+      '--build-arg',
+      `PACKAGE_NAME=${options.name}`,
+      '--build-arg',
+      `PACKAGE_SPEC=${packageSpec}`,
+      '--file',
+      dockerfile,
+      packageFolder,
+    ], options.timeoutMs, options.dockerHost)
+    await executeDocker([
+      'create',
+      '--name',
+      discoveryContainerName,
+      imageName,
+      'bun',
+      '/inspect/discover.js',
+    ], options.timeoutMs, options.dockerHost)
+    await executeDocker(['start', discoveryContainerName], options.timeoutMs, options.dockerHost)
+    const discoveryExitCode = await waitForContainer(discoveryContainerName)
+    if (discoveryExitCode !== 0) {
+      throw new Error(`Export discovery exited with code ${discoveryExitCode}`)
+    }
+    const paths = parseDiscoveredPaths(await executeDocker(['logs', discoveryContainerName], options.timeoutMs, options.dockerHost))
+    await removeContainer(discoveryContainerName)
+
     await executeDocker(['network', 'create', networkName], options.timeoutMs, options.dockerHost)
     await executeDocker([
       'create',
@@ -125,7 +199,7 @@ export const runContainer: ContainerRunner = async options => {
       '--network-alias',
       'results',
       '-e',
-      'RESULT_SERVER_PORT=' + resultServerPort,
+      `RESULT_SERVER_PORT=${resultServerPort}`,
       options.image,
       'sh',
       '-lc',
@@ -135,44 +209,58 @@ export const runContainer: ContainerRunner = async options => {
     ], options.timeoutMs, options.dockerHost)
     await executeDocker(['start', resultContainerName], options.timeoutMs, options.dockerHost)
     await executeDocker(['exec', resultContainerName, 'bun', '--eval', waitForResultServerScript], options.timeoutMs, options.dockerHost)
-    await executeDocker([
-      'create',
-      '--name',
-      explorationContainerName,
-      '--network',
-      networkName,
-      '-e',
-      'PACKAGE_NAME=' + options.name,
-      '-e',
-      'PACKAGE_SPEC=' + packageSpec,
-      '-e',
-      'RESULT_ENDPOINT=http://results:' + resultServerPort,
-      options.image,
-      'sh',
-      '-lc',
-      'bun add "$PACKAGE_SPEC" >/dev/null 2>&1 && bun --eval "$1"',
-      'sh',
-      probe,
-    ], options.timeoutMs, options.dockerHost)
-    await executeDocker(['start', explorationContainerName], options.timeoutMs, options.dockerHost)
-    const explorationExitCode = parseContainerExitCode(await executeDocker(['wait', explorationContainerName], options.timeoutMs, options.dockerHost))
-    if (explorationExitCode !== 0) {
-      throw new Error('Export exploration exited with code ' + explorationExitCode)
-    }
-    return await executeDocker(['exec', resultContainerName, 'bun', '--eval', readResultsScript], options.timeoutMs, options.dockerHost)
-  } finally {
-    for (const containerName of [explorationContainerName, resultContainerName]) {
+
+    for (const [index, exportPath] of paths.entries()) {
+      const explorationContainerName = `inspect-exports-probe-${id}-${index}`
       try {
-        await executeDocker(['rm', '-f', containerName], 10_000, options.dockerHost)
-      } catch {
+        await executeDocker([
+          'create',
+          '--name',
+          explorationContainerName,
+          '--network',
+          networkName,
+          '-e',
+          `EXPORT_PATH=${exportPath}`,
+          '-e',
+          `RESULT_ENDPOINT=http://results:${resultServerPort}`,
+          imageName,
+        ], options.timeoutMs, options.dockerHost)
+        await executeDocker(['start', explorationContainerName], options.timeoutMs, options.dockerHost)
+        const exitCode = await waitForContainer(explorationContainerName)
+        if (exitCode !== 0) {
+          throw new Error(`Export exploration exited with code ${exitCode}`)
+        }
+      } catch (error) {
+        await submitFailure(exportPath, error)
+      } finally {
+        await removeContainer(explorationContainerName)
       }
     }
+
+    let output = await readResults()
+    const reportedPaths = getReportedPaths(output)
+    const missingPaths = paths.filter(path => !reportedPaths.has(path))
+    for (const exportPath of missingPaths) {
+      await submitFailure(exportPath, new Error('Export exploration exited without submitting a result'))
+    }
+    if (missingPaths.length) {
+      output = await readResults()
+    }
+    return output
+  } finally {
+    await removeContainer(discoveryContainerName)
+    await removeContainer(resultContainerName)
     try {
       await executeDocker(['network', 'rm', networkName], 10_000, options.dockerHost)
     } catch {
     }
+    try {
+      await executeDocker(['image', 'rm', '-f', imageName], 10_000, options.dockerHost)
+    } catch {
+    }
   }
 }
+
 const resolveVersion = async (name: string, fetchImplementation: FetchImplementation) => {
   const response = await fetchImplementation(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
     headers: {accept: 'application/json'},
@@ -189,16 +277,6 @@ const resolveVersion = async (name: string, fetchImplementation: FetchImplementa
   }
   return version
 }
-export const getInspectionFailure = (error: unknown): InspectionFailure => {
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      ...error.name ? {name: error.name} : {},
-    }
-  }
-  return {message: String(error)}
-}
-
 const inspectExports = async (options: Options): Promise<Inspection> => {
   try {
     const fetchImplementation = options.fetch ?? fetch
