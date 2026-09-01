@@ -7,6 +7,10 @@ import {join, resolve} from 'node:path'
 /* eslint-enable typescript/no-restricted-imports */
 
 const probePath = resolve(import.meta.dir, '../src/probe.js')
+type ProbeResult = {
+  failures?: Record<string, {message: string; name?: string}>
+  modules: Record<string, unknown>
+}
 const runProbe = async (packageJson: Record<string, unknown>, files: Record<string, string>, rootFiles: Record<string, string> = {}) => {
   const root = await mkdtemp(join(tmpdir(), 'inspect-exports-probe-'))
   const packageFolder = join(root, 'node_modules', 'demo')
@@ -43,7 +47,7 @@ const runProbe = async (packageJson: Record<string, unknown>, files: Record<stri
       new Response(child.stderr).text(),
     ])
     expect(exitCode, stderr).toBe(0)
-    return JSON.parse(stdout) as Record<string, unknown>
+    return JSON.parse(stdout) as ProbeResult
   } finally {
     await rm(root, {
       force: true,
@@ -73,7 +77,8 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
     'blocked/private.js': 'export const secret = true',
   })
   expect(result).toEqual({
-    '.': {
+    modules: {
+      '.': {
       default: 'function',
       named: {
         foo: 'function',
@@ -94,9 +99,10 @@ test('inspects explicit, conditional and wildcard export paths', async () => {
         a: 'number',
       },
     },
-    './features/b': {
-      named: {
-        B: 'class',
+      './features/b': {
+        named: {
+          B: 'class',
+        },
       },
     },
   })
@@ -113,13 +119,13 @@ test('preserves default exports without inferring CommonJS', async () => {
     'alias.js': 'const foo = {}\nexport {foo}\nexport default {foo}',
     'commonjs.cjs': 'module.exports = function demo() {}\nmodule.exports.bar = () => {}',
   })
-  expect(result['.']).toEqual({
+  expect(result.modules['.']).toEqual({
     default: {
       type: 'object',
       keys: ['foo'],
     },
   })
-  expect(result['./alias']).toEqual({
+  expect(result.modules['./alias']).toEqual({
     default: {
       type: 'object',
       keys: ['foo'],
@@ -131,7 +137,7 @@ test('preserves default exports without inferring CommonJS', async () => {
       },
     },
   })
-  expect(result['./commonjs']).toMatchObject({
+  expect(result.modules['./commonjs']).toMatchObject({
     default: 'function',
     named: {bar: 'function'},
   })
@@ -140,9 +146,11 @@ test('inspects only the package root when exports is absent', async () => {
   expect(await runProbe({}, {
     'index.js': 'export const root = true',
   })).toEqual({
-    '.': {
+    modules: {
+      '.': {
       named: {
-        root: 'boolean',
+          root: 'boolean',
+        },
       },
     },
   })
@@ -174,13 +182,34 @@ test('installs declared peer dependencies before inspecting exports', async () =
     }),
     'node_modules/peer-demo/index.js': "export const version = '1.0.0'",
   })).toEqual({
-    '.': {
-      named: {
-        version: {
-          type: 'string',
-          value: '2.0.0',
+    modules: {
+      '.': {
+        named: {
+          version: {
+            type: 'string',
+            value: '2.0.0',
+          },
         },
       },
+    },
+  })
+})
+
+test('reports module evaluation failures', async () => {
+  const result = await runProbe({
+    exports: {
+      '.': './index.js',
+      './broken': './broken.js',
+    },
+  }, {
+    'index.js': 'export const healthy = true',
+    'broken.js': "throw new TypeError('broken export')",
+  })
+  expect(result.modules['.']).toEqual({named: {healthy: 'boolean'}})
+  expect(result.failures).toEqual({
+    './broken': {
+      name: 'TypeError',
+      message: 'broken export',
     },
   })
 })

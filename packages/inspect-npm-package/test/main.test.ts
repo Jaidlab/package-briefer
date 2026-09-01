@@ -338,8 +338,10 @@ test('inspects npm package metadata', async () => {
         version: '2.0.0',
       })
       return {
-        '.': {
-          named: {foo: 'function'},
+        modules: {
+          '.': {
+            named: {foo: 'function'},
+          },
         },
       }
     },
@@ -347,8 +349,10 @@ test('inspects npm package metadata', async () => {
   expect(Object.keys(inspection.releases.tags)).toEqual(['beta', 'latest'])
   expect(inspection).toEqual({
     exports: {
-      '.': {
-        named: {foo: 'function'},
+      modules: {
+        '.': {
+          named: {foo: 'function'},
+        },
       },
     },
     focused: {
@@ -587,7 +591,7 @@ test('configures sample sizes', async () => {
     recentReleases: 0,
     recentVersions: 1,
     topContributors: 0,
-    exportsInspector: async () => {},
+    exportsInspector: async () => ({modules: {}}),
   })
   expect(inspection.releases.tags.latest.previous).toBeUndefined()
   expect(inspection.repository && 'github' in inspection.repository ? inspection.repository.github : undefined).toMatchObject({
@@ -610,13 +614,13 @@ test('focuses an explicit version', async () => {
     now,
     exportsInspector: async options => {
       inspectedVersion = options.version ?? ''
-      return {'.': {default: 'function'}}
+      return {modules: {'.': {default: 'function'}}}
     },
   })
   expect(inspectedVersion).toBe('1.5.0')
   expect(inspection.focused.version).toBe('1.5.0')
   expect(inspection.focused.package).toEqual({})
-  expect(inspection.exports).toEqual({'.': {default: 'function'}})
+  expect(inspection.exports).toEqual({modules: {'.': {default: 'function'}}})
 })
 test('focuses a release tag', async () => {
   let focusedVersion = ''
@@ -634,7 +638,7 @@ test('focuses a release tag', async () => {
     exportsInspector: async options => {
       inspectedVersion = options.version ?? ''
       events.push('exports')
-      return {'.': {default: 'function'}}
+      return {modules: {'.': {default: 'function'}}}
     },
   })
   expect(focusedVersion).toBe('3.0.0-beta.1')
@@ -659,6 +663,13 @@ test('skips tarball-derived stats when the tarball is broken', async () => {
       throw new Error('Docker unavailable')
     },
   })).toEqual({
+    exports: {
+      modules: {},
+      error: {
+        name: 'Error',
+        message: 'Docker unavailable',
+      },
+    },
     focused: {
       version: '1.0.0',
       date: {

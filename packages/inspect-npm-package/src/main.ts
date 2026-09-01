@@ -4,7 +4,7 @@ import type {BriefPackage, BriefRelease, FocusedRelease, Inspection, TaggedRelea
 import type {Inspection as ExportsInspection, Options as InspectExportsOptions} from 'inspect-exports'
 
 import {Temporal} from '@js-temporal/polyfill'
-import inspectExports from 'inspect-exports'
+import inspectExports, {getInspectionFailure} from 'inspect-exports'
 
 import {compareInstants, formatEasyDate} from './lib/date.ts'
 import {defaultGitHubInspectionOptions, getGitHubSlug, getRepositoryUrl, GitHubClient} from './lib/GitHubClient.ts'
@@ -12,7 +12,7 @@ import {NpmRegistryClient, PackageVersionNotFoundError} from './lib/NpmRegistryC
 import {NpmxClient} from './lib/NpmxClient.ts'
 
 export type ExportsInspectorOptions = Pick<InspectExportsOptions, 'dockerHost' | 'name' | 'version'>
-export type ExportsInspector = (options: ExportsInspectorOptions) => Promise<ExportsInspection | undefined>
+export type ExportsInspector = (options: ExportsInspectorOptions) => Promise<ExportsInspection>
 
 export type SamplingOptions = {
   recentCommits?: number
@@ -114,7 +114,11 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
         name: packument.name,
         version: focusedVersion,
       })
-    } catch {
+    } catch (error) {
+      return {
+        modules: {},
+        error: getInspectionFailure(error),
+      }
     }
   })()
   const releaseCache = new Map<string, Promise<BriefRelease>>
@@ -206,7 +210,7 @@ const inspectNpmPackage = async (options: Options): Promise<Inspection> => {
     package: getBriefPackage(focusedEntry.metadata),
   }
   return {
-    ...exportsInspection === undefined ? {} : {exports: exportsInspection},
+    exports: exportsInspection,
     focused,
     releases: {
       total: Object.keys(versions).length,

@@ -31,7 +31,16 @@ export type ModuleInspection = {
   named?: Record<string, ExportValue>
 }
 
-export type Inspection = Record<string, ModuleInspection>
+export type InspectionFailure = {
+  message: string
+  name?: string
+}
+
+export type Inspection = {
+  error?: InspectionFailure
+  failures?: Record<string, InspectionFailure>
+  modules: Record<string, ModuleInspection>
+}
 
 export type FetchImplementation = (input: Request | URL | string, init?: RequestInit) => Promise<Response>
 
@@ -131,7 +140,17 @@ const resolveVersion = async (name: string, fetchImplementation: FetchImplementa
   }
   return version
 }
-const inspectExports = async (options: Options): Promise<Inspection | undefined> => {
+export const getInspectionFailure = (error: unknown): InspectionFailure => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      ...error.name ? {name: error.name} : {},
+    }
+  }
+  return {message: String(error)}
+}
+
+const inspectExports = async (options: Options): Promise<Inspection> => {
   try {
     const fetchImplementation = options.fetch ?? fetch
     const version = options.version ?? await resolveVersion(options.name, fetchImplementation)
@@ -143,11 +162,15 @@ const inspectExports = async (options: Options): Promise<Inspection | undefined>
       version,
     })
     const inspection = JSON.parse(output) as unknown
-    if (!inspection || typeof inspection !== 'object' || Array.isArray(inspection)) {
-      return
+    if (!inspection || typeof inspection !== 'object' || Array.isArray(inspection) || !('modules' in inspection) || !inspection.modules || typeof inspection.modules !== 'object' || Array.isArray(inspection.modules)) {
+      throw new Error('Export probe returned an invalid inspection')
     }
     return inspection as Inspection
-  } catch {
+  } catch (error) {
+    return {
+      modules: {},
+      error: getInspectionFailure(error),
+    }
   }
 }
 

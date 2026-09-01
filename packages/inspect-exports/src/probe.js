@@ -143,15 +143,30 @@ for (const [exportPath, target] of exportEntries) {
   }
 }
 
-const inspection = {}
+const getInspectionFailure = error => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      ...(error.name ? {name: error.name} : {}),
+    }
+  }
+  return {message: String(error)}
+}
+
+const modules = {}
+const failures = {}
 for (const exportPath of paths) {
   const specifier = exportPath === '.' ? moduleName : `${moduleName}${exportPath.slice(1)}`
   try {
     const moduleInspection = await inspectModule(specifier)
     if (moduleInspection) {
-      inspection[exportPath] = moduleInspection
+      modules[exportPath] = moduleInspection
     }
-  } catch {
+  } catch (error) {
+    failures[exportPath] = getInspectionFailure(error)
   }
 }
-console.log(JSON.stringify(inspection))
+console.log(JSON.stringify({
+  modules,
+  ...(Object.keys(failures).length ? {failures} : {}),
+}))

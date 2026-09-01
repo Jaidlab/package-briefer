@@ -5,12 +5,14 @@ import {expect, test} from 'bun:test'
 import inspectExports from '../src/main.ts'
 
 const inspection = {
-  '.': {
+  modules: {
+    '.': {
     named: {
       foo: 'function',
       name: {
         type: 'string',
         value: 'demo',
+      },
       },
     },
   },
@@ -85,28 +87,38 @@ test('fails gracefully', async () => {
     containerRunner: async () => {
       throw new Error('Docker unavailable')
     },
-  })).toBeUndefined()
+  })).toEqual({
+    modules: {},
+    error: {
+      name: 'Error',
+      message: 'Docker unavailable',
+    },
+  })
 })
 test('preserves function and class descriptions from the probe', async () => {
   const result = await inspectExports({
     name: 'demo',
     version: '1.0.0',
     containerRunner: async () => JSON.stringify({
-      '.': {
+      modules: {
+        '.': {
         named: {
           Demo: 'class',
           arrow: 'function',
           asyncValue: 'async function',
+          },
         },
       },
     }),
   })
   expect(result).toEqual({
-    '.': {
+    modules: {
+      '.': {
       named: {
         Demo: 'class',
         arrow: 'function',
         asyncValue: 'async function',
+        },
       },
     },
   })

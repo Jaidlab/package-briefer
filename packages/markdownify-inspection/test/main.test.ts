@@ -8,14 +8,16 @@ import markdownifyInspection from '../src/main.ts'
 
 const inspection: Inspection = {
   exports: {
-    '.': {
+    modules: {
+      '.': {
       default: 'function',
       named: {
         flatten: 'function',
       },
     },
-    './lines': {
-      default: 'function',
+      './lines': {
+        default: 'function',
+      },
     },
   },
   focused: {
@@ -353,7 +355,9 @@ test('omits the root export path wrapper when it is the only entry point', () =>
   const rootOnlyInspection: Inspection = {
     ...inspection,
     exports: {
-      '.': inspection.exports?.['.'] ?? {},
+      modules: {
+          '.': inspection.exports?.modules['.'] ?? {},
+      },
     },
   }
   const markdown = markdownifyInspection(rootOnlyInspection, {now})
@@ -369,27 +373,29 @@ test('simplifies runtime export value descriptors in Markdown', () => {
   const descriptorInspection: Inspection = {
     ...inspection,
     exports: {
-      '.': {
-        named: {
-          Children: {
-            type: 'object',
-            keys: ['map', 'forEach', 'count'],
-          },
-          blockFences: {
-            type: 'array',
-            length: 12,
-          },
-          version: {
-            type: 'string',
-            value: '19.2.8',
+      modules: {
+        '.': {
+          named: {
+            Children: {
+              type: 'object',
+              keys: ['map', 'forEach', 'count'],
+            },
+            blockFences: {
+              type: 'array',
+              length: 12,
+            },
+            version: {
+              type: 'string',
+              value: '19.2.8',
+            },
           },
         },
-      },
-      './runtime': {
-        named: {
-          internals: {
-            type: 'object',
-            keys: 42,
+        './runtime': {
+          named: {
+            internals: {
+              type: 'object',
+              keys: 42,
+            },
           },
         },
       },
@@ -406,9 +412,31 @@ test('simplifies runtime export value descriptors in Markdown', () => {
   expect(clank).not.toContain('type array')
   const markdown = markdownifyInspection({
     ...descriptorInspection,
-    exports: {'.': descriptorInspection.exports?.['.'] ?? {}},
+    exports: {
+      modules: {'.': descriptorInspection.exports?.modules['.'] ?? {}},
+    },
   }, {now})
   expect(markdown).toContain('{"named":{"Children":{"entries":["map","forEach","count"]},"blockFences":{"items":12},"version":{"string":"19.2.8"}}}')
+})
+test('renders export inspection failures', () => {
+  const markdown = markdownifyInspection({
+    ...inspection,
+    exports: {
+      modules: {},
+      error: {
+        name: 'Error',
+        message: 'probe unavailable',
+      },
+      failures: {
+        './broken': {
+          name: 'TypeError',
+          message: 'broken export',
+        },
+      },
+    },
+  }, {now})
+  expect(markdown).toContain('## export inspection error\n\n{"name":"Error","message":"probe unavailable"}')
+  expect(markdown).toContain('## export failures\n\n### flatten-string/broken\n\n{"name":"TypeError","message":"broken export"}')
 })
 test('includes npm metadata when the focused release is not visible', () => {
   const markdown = markdownifyInspection({
